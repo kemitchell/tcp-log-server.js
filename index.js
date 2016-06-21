@@ -1,6 +1,7 @@
 var crypto = require('crypto')
 var duplexJSON = require('duplex-json-stream')
-var hashToPath = require('hash-to-path')
+var hashToPath = require('./hash-to-path')
+var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
 
 module.exports = function(pino, logs, blobs, emitter) {
@@ -12,27 +13,29 @@ module.exports = function(pino, logs, blobs, emitter) {
 
     var json = duplexJSON(connection)
     var requests = { }
+    emitter.on('appended', function(logName, index, entry) {
+      if (logName in requests) {
+        var request = requests[logName]
+        if (request.done) { sendEntry(logName, index, entry) }
+        else { request.buffer.push({ index: index, entry: entry }) } } })
+
     json.on('data', function(message) {
       log.info({ event: 'message', message: message })
       var logName = message.log
       if (replayMessage(message)) {
         var request = { done: false, buffer: [ ] }
-        emitter.on('messsage', function(toLog, index, message) {
-          if (toLog in requests) {
-            if (request.done) { send(logName, index, message) }
-            else { request.buffer.push({ index: index, message: message }) } } })
         var streamOptions = { since: message.from }
         var stream = logs.createReadStream(logName, streamOptions)
           .on('data', function(data) {
-            send(logName, data.seq, data.value) })
+            sendEntry(logName, data.seq, data.value) })
           .once('error', function(error) {
             log.error(error)
-            send(logName, -1, { error: error.toString() })
+            sendEntry(logName, -1, { error: error.toString() })
             delete requests[logName] })
           .once('end', function() {
             // Send buffered messages.
             request.buffer.forEach(function(message) {
-              send(logName, message.index, message.key, message.value) })
+              sendEntry(logName, message.index, message.key, message.entry) })
             request.buffer = null
             // Mark the stream done so messages sent via the
             // EventEmitter will be written out to the socket, rather
@@ -41,34 +44,30 @@ module.exports = function(pino, logs, blobs, emitter) {
         request.stream = stream
         requests[logName] = request }
       else if(storeMessage(message)) {
-        logs.append(message.log, message, function(error) {
-          if (error) {
+        var hash = sha256(message.entry)
+        blobs.createWriteStream({ key: hashToPath(hash) })
+          .on('error', function(error) {
             json.write({
               replyTo: message.id,
               log: message.log,
-              error: error.toString() }) }
-          else {
-            var hash = sha256(message)
-            blobs.createWriteStream({ key: hashToPath(hash) })
-              .end(JSON.stringify(message), 'utf8')
-              .on('finish', function() {
-                logs.append(message.log, message, function(error) {
-                  if (error) {
-                    json.write({
-                      replyTo: message.id,
-                      log: message.log,
-                      error: error.toString() }) }
-                  else {
-                    json.write(
-                      { replyTo: message.id,
-                        log: message.log,
-                        event: 'stored' }) } }) }) } }) } })
+              error: error.toString() }) })
+          .on('finish', function() {
+            logs.append(message.log, hash, function(error, index) {
+              if (error) {
+                json.write({
+                  replyTo: message.id,
+                  log: message.log,
+                  error: error.toString() }) }
+              else {
+                json.write(
+                  { replyTo: message.id,
+                    log: message.log,
+                    event: 'stored' })
+                emitter.emit('appended', logName, index, message.entry) } }) })
+          .end(stringify(message.entry), 'utf8') } })
 
-    function send(logName, index, message) {
-      json.write(
-        { log: logName,
-          index: index,
-          message: message }) } } }
+    function sendEntry(logName, index, entry) {
+      json.write({ log: logName, index: index, entry: entry }) } } }
 
 function replayMessage(argument) {
   return (
@@ -82,8 +81,8 @@ function storeMessage(argument) {
     isMessage(argument) &&
     has(argument, 'type', 'store') &&
     has(argument, 'log', isString) &&
-    has(argument, 'message', function(message) {
-      return ( typeof message === 'object' ) }) ) }
+    has(argument, 'entry', function(entry) {
+      return ( typeof entry === 'object' ) }) ) }
 
 function isMessage(argument) {
   return (
@@ -111,5 +110,5 @@ function isString(argument) {
 
 function sha256(argument) {
   return crypto.createHash('sha256')
-    .update(JSON.stringify(argument))
+    .update(stringify(argument))
     .digest('hex') }
