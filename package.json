@@ -20,6 +20,6 @@
     "tape": "^4.6.0"
   },
   "scripts": {
-    "test": "tape test.js"
+    "test": "node test.js"
   }
 }
