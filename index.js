@@ -83,7 +83,7 @@ module.exports = function(pino, logs, blobs, emitter) {
           var errored = false
           // Use the hash from LevelUP to look up the message data in
           // the blob store.
-          blobs.createReadStream({ key: data })
+          blobs.createReadStream({ key: hashToPath(data.value) })
             .on('data', function(chunk) { chunks.push(chunk) })
             .on('error', function(error) {
               errored = true
