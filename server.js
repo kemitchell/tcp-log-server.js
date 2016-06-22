@@ -17,6 +17,10 @@ var server = net.createServer()
 
 server.on('connection', handler)
 
+var PORT = ( parseInt(process.env.PORT) || 8089 )
+server.listen(PORT, function() {
+  pino.info({ event: 'listening', port: this.address().port }) })
+
 process.on('exit', function() {
   server.close(function() {
     level.close() }) })
