@@ -50,7 +50,7 @@ module.exports = function(pino, logs, blobs, emitter) {
     json.on('data', function(message) {
       log.info({ event: 'message', message: message })
       if (replayMessage(message)) { onReplayMessage(message) }
-      else if(storeMessage(message)) { onStoreMessage(message) } })
+      else if(appendMessage(message)) { onAppendMessage(message) } })
 
     function onReplayMessage(message) {
       var logName = message.log
@@ -105,10 +105,10 @@ module.exports = function(pino, logs, blobs, emitter) {
           replay.buffer = null
           replaying[logName].doneStreaming = true }) }
 
-    function onStoreMessage(message) {
+    function onAppendMessage(message) {
       var logName = message.log
       var hash = sha256(message.entry)
-      // Store the entry payload in the blob store, by hash.
+      // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({ key: hashToPath(hash) })
         .on('error', function(error) {
           json.write({
@@ -116,7 +116,7 @@ module.exports = function(pino, logs, blobs, emitter) {
             log: message.log,
             error: error.toString() }) })
         .on('finish', function() {
-          // Store an entry in the LevelUP log with the hash of the payload.
+          // Append an entry in the LevelUP log with the hash of the payload.
           entriesQueue.push({ log: logName, hash: hash }, function(error, index) {
             if (error) {
               json.write(
@@ -127,7 +127,7 @@ module.exports = function(pino, logs, blobs, emitter) {
               json.write(
                 { replyTo: message.id,
                   log: message.log,
-                  event: 'stored' })
+                  event: 'appended' })
               // Emit an event.
               emitter.emit('appended', logName, index, message.entry) } }) })
         .end(stringify(message.entry), 'utf8') }
@@ -142,10 +142,10 @@ function replayMessage(argument) {
     has(argument, 'from', isPositiveInteger) &&
     has(argument, 'log', isString) ) }
 
-function storeMessage(argument) {
+function appendMessage(argument) {
   return (
     isMessage(argument) &&
-    has(argument, 'type', 'store') &&
+    has(argument, 'type', 'append') &&
     has(argument, 'log', isString) &&
     has(argument, 'entry', function(entry) {
       return ( typeof entry === 'object' ) }) ) }

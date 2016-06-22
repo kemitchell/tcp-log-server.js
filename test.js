@@ -6,7 +6,7 @@ var deepEqual = require('deep-equal')
 tape('simple sync', function(test) {
   testConnections(1, function(client, server) {
     var log = 'test'
-    var storeUUID = uuid()
+    var appendUUID = uuid()
     var replayUUID = uuid()
     var messageCount = 0
     client.on('data', function(data) {
@@ -14,7 +14,7 @@ tape('simple sync', function(test) {
       if (messageCount ===  1) {
         test.deepEqual(
           data,
-          { event: 'stored', log: log, replyTo: storeUUID },
+          { event: 'appended', log: log, replyTo: appendUUID },
           'first message confirms append') }
       else if (messageCount === 2) {
         test.deepEqual(
@@ -24,14 +24,14 @@ tape('simple sync', function(test) {
         client.end()
         server.close()
         test.end() } })
-    client.write({ log: log, type: 'store', entry: { a: 1 }, id: storeUUID })
+    client.write({ log: log, type: 'append', entry: { a: 1 }, id: appendUUID })
     client.write({ log: log, type: 'replay', from: 0, id: replayUUID }) }) })
 
 tape('writes before and after replay', function(test) {
   testConnections(1, function(client, server) {
     var log = 'test'
-    var firstStoreUUID = uuid()
-    var secondStoreUUID = uuid()
+    var firstAppendUUID = uuid()
+    var secondAppendUUID = uuid()
     var replayUUID = uuid()
     var messageCount = 0
     var messages = [ ]
@@ -54,9 +54,9 @@ tape('writes before and after replay', function(test) {
         client.end()
         server.close()
         test.end() } })
-    client.write({ log: log, type: 'store', entry: { a: 1 }, id: firstStoreUUID })
+    client.write({ log: log, type: 'append', entry: { a: 1 }, id: firstAppendUUID })
     client.write({ log: log, type: 'replay', from: 0, id: replayUUID })
-    client.write({ log: log, type: 'store', entry: { b: 2 }, id: secondStoreUUID }) }) })
+    client.write({ log: log, type: 'append', entry: { b: 2 }, id: secondAppendUUID }) }) })
 
 tape('two clients', function(test) {
   testConnections(2, function(clients, server) {
@@ -82,8 +82,8 @@ tape('two clients', function(test) {
         finish() } })
     ana.write({ log: log, type: 'replay', from: 0, id: uuid() })
     bob.write({ log: log, type: 'replay', from: 0, id: uuid() })
-    ana.write({ log: log, type: 'store', entry: anaWasHere, id: uuid() })
-    bob.write({ log: log, type: 'store', entry: bobWasHere, id: uuid() }) }) })
+    ana.write({ log: log, type: 'append', entry: anaWasHere, id: uuid() })
+    bob.write({ log: log, type: 'append', entry: bobWasHere, id: uuid() }) }) })
 
 tape('old entry', function(test) {
   testConnections(1, function(client, server) {
@@ -95,5 +95,5 @@ tape('old entry', function(test) {
         client.end()
         server.close()
         test.end() } })
-    client.write({ log: log, type: 'store', entry: entry, id: uuid() })
+    client.write({ log: log, type: 'append', entry: entry, id: uuid() })
     client.write({ log: log, type: 'replay', from: 0, id: uuid() }) }) })
