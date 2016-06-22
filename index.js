@@ -1,6 +1,5 @@
 var sha256 = require('sha256')
 var duplexJSON = require('duplex-json-stream')
-var hashToPath = require('./hash-to-path')
 var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
 var queue = require('async.queue')
@@ -179,3 +178,6 @@ function isString(argument) {
   return (
     ( typeof argument === 'string' ) &&
     ( argument.length > 0 ) ) }
+
+function hashToPath(hash) {
+  return ( hash.slice(0, 2) + '/' + hash.slice(2) ) }
