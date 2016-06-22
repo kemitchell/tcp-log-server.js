@@ -97,3 +97,20 @@ tape('old entry', function(test) {
         test.end() } })
     client.write({ log: log, type: 'append', entry: entry, id: uuid() })
     client.write({ log: log, type: 'replay', from: 0, id: uuid() }) }) })
+
+tape('replay from future index', function(test) {
+  testConnections(1, function(client, server) {
+    var log = 'test'
+    var entries = [ { a: 1 }, { b: 2 } ]
+    client.on('data', function(data) {
+      if (data.log === log) {
+        if (deepEqual(data.entry, entries[0])) {
+          test.fail('received earlier entry') }
+        else if (deepEqual(data.entry, entries[1])) {
+          test.pass('receives newer entry')
+          client.end()
+          server.close()
+          test.end() } } })
+    client.write({ log: log, type: 'replay', from: 2, id: uuid() })
+    client.write({ log: log, type: 'append', entry: entries[0], id: uuid() })
+    client.write({ log: log, type: 'append', entry: entries[1], id: uuid() }) }) })

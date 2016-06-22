@@ -37,9 +37,10 @@ module.exports = function(pino, logs, blobs, emitter) {
       // If this connection is replaying the log.
       if (logName in replaying) {
         var replay = replaying[logName]
-        // TODO: DO not send entries whose seq < from
-        if (replay.doneStreaming) { sendEntry(logName, index, entry) }
-        else { replay.buffer.push({ index: index, entry: entry }) } } })
+        // Do not send entries from earlier in the log than requested.
+        if (replay.from <= index) {
+          if (replay.doneStreaming) { sendEntry(logName, index, entry) }
+          else { replay.buffer.push({ index: index, entry: entry }) } } } })
 
     // An asynchronous queue for appending hashes to logs. Ensures that
     // each append operation can read the head of the log and number
@@ -54,7 +55,7 @@ module.exports = function(pino, logs, blobs, emitter) {
 
     function onReplayMessage(message) {
       var logName = message.log
-      var replay = { doneStreaming: false, buffer: [ ] }
+      var replay = { doneStreaming: false, buffer: [ ], from: message.from }
       var streamOptions = { since: message.from }
       // A replay advances, in order, through three steps:
       //
