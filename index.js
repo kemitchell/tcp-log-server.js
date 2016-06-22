@@ -26,7 +26,11 @@ module.exports = function(pino, logs, blobs, emitter) {
         var request = { done: false, buffer: [ ] }
         var streamOptions = { since: message.from }
         var stream = logs.createReadStream(logName, streamOptions)
+        request.stream = stream
+        requests[logName] = request
+        stream
           .on('data', function(data) {
+            console.log('%s is %j', 'data', data)
             sendEntry(logName, data.seq, data.value) })
           .once('error', function(error) {
             log.error(error)
@@ -40,9 +44,7 @@ module.exports = function(pino, logs, blobs, emitter) {
             // Mark the stream done so messages sent via the
             // EventEmitter will be written out to the socket, rather
             // than buffered.
-            requests[logName].done = true })
-        request.stream = stream
-        requests[logName] = request }
+            requests[logName].done = true }) }
       else if(storeMessage(message)) {
         var hash = sha256(message.entry)
         blobs.createWriteStream({ key: hashToPath(hash) })
@@ -52,18 +54,23 @@ module.exports = function(pino, logs, blobs, emitter) {
               log: message.log,
               error: error.toString() }) })
           .on('finish', function() {
-            logs.append(message.log, hash, function(error, index) {
-              if (error) {
-                json.write({
-                  replyTo: message.id,
-                  log: message.log,
-                  error: error.toString() }) }
-              else {
-                json.write(
-                  { replyTo: message.id,
-                    log: message.log,
-                    event: 'stored' })
-                emitter.emit('appended', logName, index, message.entry) } }) })
+            console.log('appending')
+            console.log('%s is %j', 'message.log', message.log)
+            setImmediate(function() {
+              logs.append(message.log, hash, function(error, index) {
+                console.log('%s is %j', 'index', index)
+                if (error) {
+                  json.write(
+                    { replyTo: message.id,
+                      log: message.log,
+                      error: error.toString() }) }
+                else {
+                  json.write(
+                    { replyTo: message.id,
+                      log: message.log,
+                      event: 'stored' })
+                  console.log('%s is %j', 'message.entry', message.entry)
+                  emitter.emit('appended', logName, index, message.entry) } }) }) })
           .end(stringify(message.entry), 'utf8') } })
 
     function sendEntry(logName, index, entry) {

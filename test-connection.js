@@ -7,6 +7,7 @@ var net = require('net')
 var pino = require('pino')
 
 module.exports = function(callback) {
+  memdown.clearGlobalStore()
   var level = levelup('', { db: memdown })
   var logs = levelLogs(level, { valueEncoding: 'json' })
   var blobs = require('abstract-blob-store')()
@@ -16,6 +17,10 @@ module.exports = function(callback) {
   var server = net.createServer()
     .on('connection', handler)
     .on('close', function() {
+      logs.createReadStream('test')
+            .on('data', function (data) {
+                      console.log(data)
+                            })
       level.close() })
     .listen(0, function() {
       var serverPort = this.address().port
