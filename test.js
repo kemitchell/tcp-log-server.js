@@ -1,10 +1,10 @@
 var tape = require('tape')
-var testConnection = require('./test-connection')
+var testConnections = require('./test-connections')
 var uuid = require('uuid').v4
 var deepEqual = require('deep-equal')
 
 tape('simple sync', function(test) {
-  testConnection(1, function(client, server) {
+  testConnections(1, function(client, server) {
     var storeUUID = uuid()
     var replayUUID = uuid()
     var messageCount = 0
@@ -29,7 +29,7 @@ tape('simple sync', function(test) {
       { type: 'replay', log: 'test', from: 0, id: replayUUID }) }) })
 
 tape('writes before and after replay', function(test) {
-  testConnection(1, function(client, server) {
+  testConnections(1, function(client, server) {
     var firstStoreUUID = uuid()
     var secondStoreUUID = uuid()
     var replayUUID = uuid()
@@ -62,7 +62,7 @@ tape('writes before and after replay', function(test) {
       { type: 'store', log: 'test', entry: { b: 2 }, id: secondStoreUUID }) }) })
 
 tape('two clients', function(test) {
-  testConnection(2, function(clients, server) {
+  testConnections(2, function(clients, server) {
     var sharedLog = 'test'
     var ana = clients[0]
     var bob = clients[1]
@@ -93,7 +93,7 @@ tape('two clients', function(test) {
       { type: 'store', log: sharedLog, entry: bobWasHere, id: uuid() }) }) })
 
 tape('old entry', function(test) {
-  testConnection(1, function(client, server) {
+  testConnections(1, function(client, server) {
     var log = 'test'
     var entry = { a: 1 }
     client.on('data', function(data) {
