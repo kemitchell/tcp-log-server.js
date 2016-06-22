@@ -4,14 +4,14 @@ var sha256 = require('sha256')
 var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
 
-module.exports = function(pino, logs, blobs, emitter) {
+module.exports = function(serverLog, logs, blobs, emitter) {
   return function(connection) {
     // Child log for this connection.
-    var log = pino.child({ connection: uuid.v4() })
-    log.info({ event: 'connected' })
+    serverLog = serverLog.child({ connection: uuid.v4() })
+    serverLog.info({ event: 'connected' })
     connection
-      .on('end', function() { log.info({ event: 'end' }) })
-      .on('close', function(error) { log.info({ event: 'end', error: error }) })
+      .on('end', function() { serverLog.info({ event: 'end' }) })
+      .on('close', function(error) { serverLog.info({ event: 'end', error: error }) })
 
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
@@ -45,14 +45,14 @@ module.exports = function(pino, logs, blobs, emitter) {
     // relevant places below.
 
     // New entries are emitted as they are made.
-    emitter.on('appended', function(logName, index, entry) {
+    emitter.on('appended', function(log, index, entry) {
       // If this connection is replaying the log.
-      if (logName in replaying) {
-        var replay = replaying[logName]
+      if (log in replaying) {
+        var replay = replaying[log]
         // Do not send entries from earlier in the log than requested.
         if (replay.from <= index) {
           // Phase 3:
-          if (replay.doneStreaming) { sendEntry(logName, index, entry) }
+          if (replay.doneStreaming) { sendEntry(log, index, entry) }
           // Waiting for Phase 2
           else { replay.buffer.push({ index: index, entry: entry }) } } } })
 
@@ -63,19 +63,19 @@ module.exports = function(pino, logs, blobs, emitter) {
       logs.append(task.log, task.hash, done) })
 
     json.on('data', function(message) {
-      log.info({ event: 'message', message: message })
+      serverLog.info({ event: 'message', message: message })
       if (replayMessage(message)) { onReplayMessage(message) }
       else if(appendMessage(message)) { onAppendMessage(message) } })
 
     function onReplayMessage(message) {
-      var logName = message.log
+      var log = message.log
       var replay = { doneStreaming: false, buffer: [ ], from: message.from }
       var streamOptions = { since: message.from }
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
-      var stream = logs.createReadStream(logName, streamOptions)
+      var stream = logs.createReadStream(log, streamOptions)
       replay.stream = stream
-      replaying[logName] = replay
+      replaying[log] = replay
       stream
         .on('data', function(data) {
           var chunks = [ ]
@@ -86,7 +86,7 @@ module.exports = function(pino, logs, blobs, emitter) {
             .on('data', function(chunk) { chunks.push(chunk) })
             .on('error', function(error) {
               errored = true
-              log.error(error)
+              serverLog.error(error)
               json.write({
                 replyTo: message.id,
                 log: message.log,
@@ -94,24 +94,24 @@ module.exports = function(pino, logs, blobs, emitter) {
             .on('end', function() {
               if (!errored) {
                 var value = JSON.parse(Buffer.concat(chunks))
-                sendEntry(logName, data.seq, value) } }) })
+                sendEntry(log, data.seq, value) } }) })
         .once('error', function(error) {
-          log.error(error)
-          sendEntry(logName, -1, { error: error.toString() })
-          delete replaying[logName] })
+          streamLog.error(error)
+          sendEntry(log, -1, { error: error.toString() })
+          delete replaying[log] })
         .once('end', function() {
           // Phase 2: Entries may have been appended while we were
           // streaming from LevelUP. Send them now.
           replay.buffer.forEach(function(message) {
-            sendEntry(logName, message.index, message.key, message.entry) })
+            sendEntry(log, message.index, message.key, message.entry) })
           // Mark the stream done so messages sent via the
           // EventEmitter will be written out to the socket, rather
           // than buffered.
           replay.buffer = null
-          replaying[logName].doneStreaming = true }) }
+          replaying[log].doneStreaming = true }) }
 
     function onAppendMessage(message) {
-      var logName = message.log
+      var log = message.log
       var hash = sha256(stringify(message.entry))
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({ key: hashToPath(hash) })
@@ -122,7 +122,7 @@ module.exports = function(pino, logs, blobs, emitter) {
             error: error.toString() }) })
         .on('finish', function() {
           // Append an entry in the LevelUP log with the hash of the payload.
-          entriesQueue.push({ log: logName, hash: hash }, function(error, index) {
+          entriesQueue.push({ log: log, hash: hash }, function(error, index) {
             if (error) {
               json.write(
                 { replyTo: message.id,
@@ -134,11 +134,11 @@ module.exports = function(pino, logs, blobs, emitter) {
                   log: message.log,
                   event: 'appended' })
               // Emit an event.
-              emitter.emit('appended', logName, index, message.entry) } }) })
+              emitter.emit('appended', log, index, message.entry) } }) })
         .end(stringify(message.entry), 'utf8') }
 
-    function sendEntry(logName, index, entry) {
-      json.write({ log: logName, index: index, entry: entry }) } } }
+    function sendEntry(log, index, entry) {
+      json.write({ log: log, index: index, entry: entry }) } } }
 
 function replayMessage(argument) {
   return (
