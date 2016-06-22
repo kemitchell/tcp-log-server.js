@@ -1,4 +1,4 @@
-var crypto = require('crypto')
+var sha256 = require('sha256')
 var duplexJSON = require('duplex-json-stream')
 var hashToPath = require('./hash-to-path')
 var stringify = require('json-stable-stringify')
@@ -113,7 +113,7 @@ module.exports = function(pino, logs, blobs, emitter) {
 
     function onAppendMessage(message) {
       var logName = message.log
-      var hash = sha256(message.entry)
+      var hash = sha256(stringify(message.entry))
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({ key: hashToPath(hash) })
         .on('error', function(error) {
@@ -179,8 +179,3 @@ function isString(argument) {
   return (
     ( typeof argument === 'string' ) &&
     ( argument.length > 0 ) ) }
-
-function sha256(argument) {
-  return crypto.createHash('sha256')
-    .update(stringify(argument))
-    .digest('hex') }
