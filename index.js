@@ -32,6 +32,19 @@ module.exports = function(pino, logs, blobs, emitter) {
     //   doneStreaming is true.
     var replaying = { }
 
+    // A replay advances, in order, through three phases:
+    //
+    // Phase 1. Streaming entries from the LevelUP store, fetching
+    //          their content from the blob store.
+    //
+    // Phase 2. Sending buffered entries that were appended while the
+    //          replay was streaming.
+    //
+    // Phase 3. Sending entries as they are appended.
+    //
+    // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
+    // relevant places below.
+
     // New entries are emitted as they are made.
     emitter.on('appended', function(logName, index, entry) {
       // If this connection is replaying the log.
@@ -39,7 +52,9 @@ module.exports = function(pino, logs, blobs, emitter) {
         var replay = replaying[logName]
         // Do not send entries from earlier in the log than requested.
         if (replay.from <= index) {
+          // Phase 3:
           if (replay.doneStreaming) { sendEntry(logName, index, entry) }
+          // Waiting for Phase 2
           else { replay.buffer.push({ index: index, entry: entry }) } } } })
 
     // An asynchronous queue for appending hashes to logs. Ensures that
@@ -57,17 +72,8 @@ module.exports = function(pino, logs, blobs, emitter) {
       var logName = message.log
       var replay = { doneStreaming: false, buffer: [ ], from: message.from }
       var streamOptions = { since: message.from }
-      // A replay advances, in order, through three steps:
-      //
-      // 1. Streaming entries from the LevelUP store, fetching their
-      //    content from the blob store.
-      //
-      // 2. Sending buffered entries that were appended while the replay
-      //    was streaming.
-      //
-      // 3. Sending entries as they are appended.
 
-      // Stream index-hash pairs from the LevelUP store.
+      // Phase 1: Stream index-hash pairs from the LevelUP store.
       var stream = logs.createReadStream(logName, streamOptions)
       replay.stream = stream
       replaying[logName] = replay
@@ -95,8 +101,8 @@ module.exports = function(pino, logs, blobs, emitter) {
           sendEntry(logName, -1, { error: error.toString() })
           delete replaying[logName] })
         .once('end', function() {
-          // Entries may have been appended while we were streaming from
-          // LevelUP. Send them now.
+          // Phase 2: Entries may have been appended while we were
+          // streaming from LevelUP. Send them now.
           replay.buffer.forEach(function(message) {
             sendEntry(logName, message.index, message.key, message.entry) })
           // Mark the stream done so messages sent via the
