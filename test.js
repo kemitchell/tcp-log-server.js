@@ -91,3 +91,18 @@ tape('two clients', function(test) {
       { type: 'store', log: sharedLog, entry: anaWasHere, id: uuid() })
     bob.write(
       { type: 'store', log: sharedLog, entry: bobWasHere, id: uuid() }) }) })
+
+tape('old entry', function(test) {
+  testConnection(1, function(client, server) {
+    var log = 'test'
+    var entry = { a: 1 }
+    client.on('data', function(data) {
+      if (data.log === log && deepEqual(data.entry, entry)) {
+        test.pass('receives old entry')
+        client.end()
+        server.close()
+        test.end() } })
+    client.write(
+      { type: 'store', log: log, entry: entry, id: uuid() })
+    client.write(
+      { type: 'replay', log: log, from: 0, id: uuid() }) }) })

@@ -34,7 +34,21 @@ module.exports = function(pino, logs, blobs, emitter) {
         requests[logName] = request
         stream
           .on('data', function(data) {
-            sendEntry(logName, data.seq, data.value) })
+            var chunks = [ ]
+            var errored = false
+            blobs.createReadStream({ key: data })
+              .on('data', function(chunk) { chunks.push(chunk) })
+              .on('error', function(error) {
+                errored = true
+                log.error(error)
+                json.end({
+                  replyTo: message.id,
+                  log: message.log,
+                  error: error.toString() }) })
+              .on('end', function() {
+                if (!errored) {
+                  var value = JSON.parse(Buffer.concat(chunks))
+                  sendEntry(logName, data.seq, value) } }) })
           .once('error', function(error) {
             log.error(error)
             sendEntry(logName, -1, { error: error.toString() })
