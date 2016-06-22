@@ -1,8 +1,8 @@
-var sha256 = require('sha256')
 var duplexJSON = require('duplex-json-stream')
+var queue = require('async.queue')
+var sha256 = require('sha256')
 var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
-var queue = require('async.queue')
 
 module.exports = function(pino, logs, blobs, emitter) {
   return function(connection) {
