@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "async.queue": "^0.5.2",
     "duplex-json-stream": "^1.0.1",
     "fs-blob-store": "^5.2.1",
     "json-stable-stringify": "^1.0.1",

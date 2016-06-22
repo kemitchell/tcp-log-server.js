@@ -39,7 +39,6 @@ tape('writes before and after replay', function(test) {
       messageCount++
       messages.push(data)
       if (messageCount === 4) {
-        console.log(JSON.stringify(messages, null, 2))
         test.assert(
           messages.some(function(element) {
             return deepEqual(

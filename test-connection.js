@@ -17,10 +17,6 @@ module.exports = function(callback) {
   var server = net.createServer()
     .on('connection', handler)
     .on('close', function() {
-      logs.createReadStream('test')
-            .on('data', function (data) {
-                      console.log(data)
-                            })
       level.close() })
     .listen(0, function() {
       var serverPort = this.address().port

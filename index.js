@@ -3,6 +3,7 @@ var duplexJSON = require('duplex-json-stream')
 var hashToPath = require('./hash-to-path')
 var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
+var queue = require('async.queue')
 
 module.exports = function(pino, logs, blobs, emitter) {
   return function(connection) {
@@ -19,6 +20,9 @@ module.exports = function(pino, logs, blobs, emitter) {
         if (request.done) { sendEntry(logName, index, entry) }
         else { request.buffer.push({ index: index, entry: entry }) } } })
 
+    var entriesQueue = queue(function(task, done) {
+      logs.append(task.log, task.hash, done) })
+
     json.on('data', function(message) {
       log.info({ event: 'message', message: message })
       var logName = message.log
@@ -30,7 +34,6 @@ module.exports = function(pino, logs, blobs, emitter) {
         requests[logName] = request
         stream
           .on('data', function(data) {
-            console.log('%s is %j', 'data', data)
             sendEntry(logName, data.seq, data.value) })
           .once('error', function(error) {
             log.error(error)
@@ -54,23 +57,18 @@ module.exports = function(pino, logs, blobs, emitter) {
               log: message.log,
               error: error.toString() }) })
           .on('finish', function() {
-            console.log('appending')
-            console.log('%s is %j', 'message.log', message.log)
-            setImmediate(function() {
-              logs.append(message.log, hash, function(error, index) {
-                console.log('%s is %j', 'index', index)
-                if (error) {
-                  json.write(
-                    { replyTo: message.id,
-                      log: message.log,
-                      error: error.toString() }) }
-                else {
-                  json.write(
-                    { replyTo: message.id,
-                      log: message.log,
-                      event: 'stored' })
-                  console.log('%s is %j', 'message.entry', message.entry)
-                  emitter.emit('appended', logName, index, message.entry) } }) }) })
+            entriesQueue.push({ log: logName, hash: hash }, function(error, index) {
+              if (error) {
+                json.write(
+                  { replyTo: message.id,
+                    log: message.log,
+                    error: error.toString() }) }
+              else {
+                json.write(
+                  { replyTo: message.id,
+                    log: message.log,
+                    event: 'stored' })
+                emitter.emit('appended', logName, index, message.entry) } }) })
           .end(stringify(message.entry), 'utf8') } })
 
     function sendEntry(logName, index, entry) {
