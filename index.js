@@ -82,8 +82,7 @@ module.exports = function(pino, logs, blobs, emitter) {
             .on('error', function(error) {
               errored = true
               log.error(error)
-              // TODO: Send an error for the replay, but don't close the connection.
-              json.end({
+              json.write({
                 replyTo: message.id,
                 log: message.log,
                 error: error.toString() }) })
