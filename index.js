@@ -9,8 +9,9 @@ module.exports = function(pino, logs, blobs, emitter) {
   return function(connection) {
     var log = pino.child({ connection: uuid.v4() })
     log.info({ event: 'connected' })
-    connection.on('end', function() {
-      log.info({ event: 'end' }) })
+    connection
+      .on('end', function() { log.info({ event: 'end' }) })
+      .on('close', function(error) { log.info({ event: 'end', error: error }) })
 
     var json = duplexJSON(connection)
     var requests = { }
