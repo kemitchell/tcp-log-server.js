@@ -121,7 +121,6 @@ tape('replay from future index', function(test) {
     client.write({ log: log, type: 'append', entry: entries[0], id: uuid() })
     client.write({ log: log, type: 'append', entry: entries[1], id: uuid() }) }) })
 
-
 function testConnections(numberOfClients, callback) {
   memdown.clearGlobalStore()
   var level = levelup('', { db: memdown })
