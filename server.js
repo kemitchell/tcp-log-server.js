@@ -12,11 +12,11 @@ var handler = require('./')(
   require('fs-blob-store')(BLOBS),
   new (require('events').EventEmitter)())
 
-var server = require('net').createServer(handler)
+var server = require('net').createServer()
+  .on('connection', handler)
+  .on('close', function() { level.close() })
 
 server.listen(PORT, function() {
   pino.info({ event: 'listening', port: this.address().port }) })
 
-process.on('exit', function() {
-  server.close(function() {
-    level.close() }) })
+process.on('exit', function() { server.close() })
