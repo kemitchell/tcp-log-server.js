@@ -123,16 +123,18 @@ tape('replay from future index', function(test) {
 
 function testConnections(numberOfClients, callback) {
   memdown.clearGlobalStore()
+  // Use an in-memory storage back-end.
   var level = levelup('', { db: memdown })
   var logs = levelLogs(level, { valueEncoding: 'json' })
+  // Use an in-memory blob store.
   var blobs = require('abstract-blob-store')()
+  // Pipe log messages to nowhere.
   var log = pino({ }, devnull())
   var emitter = new (require('events').EventEmitter)()
   var handler = require('./')(log, logs, blobs, emitter)
   var server = net.createServer()
     .on('connection', handler)
-    .on('close', function() {
-      level.close() })
+    .on('close', function() { level.close() })
     .listen(0, function() {
       var serverPort = this.address().port
       var clients = []
@@ -140,7 +142,5 @@ function testConnections(numberOfClients, callback) {
         var client = net.connect(serverPort)
         var clientJSON = duplexJSON(client)
         clients.push(clientJSON) }
-      if (numberOfClients === 1) {
-        callback(clients[0], server) }
-      else {
-        callback(clients, server) } }) }
+      if (numberOfClients === 1) { callback(clients[0], server) }
+      else { callback(clients, server) } }) }
