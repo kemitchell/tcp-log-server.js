@@ -1,7 +1,13 @@
-var tape = require('tape')
-var testConnections = require('./test-connections')
-var uuid = require('uuid').v4
 var deepEqual = require('deep-equal')
+var devnull = require('dev-null')
+var duplexJSON = require('duplex-json-stream')
+var levelLogs = require('level-logs')
+var levelup = require('levelup')
+var memdown = require('memdown')
+var net = require('net')
+var pino = require('pino')
+var tape = require('tape')
+var uuid = require('uuid').v4
 
 tape('simple sync', function(test) {
   testConnections(1, function(client, server) {
@@ -114,3 +120,28 @@ tape('replay from future index', function(test) {
     client.write({ log: log, type: 'replay', from: 2, id: uuid() })
     client.write({ log: log, type: 'append', entry: entries[0], id: uuid() })
     client.write({ log: log, type: 'append', entry: entries[1], id: uuid() }) }) })
+
+
+function testConnections(numberOfClients, callback) {
+  memdown.clearGlobalStore()
+  var level = levelup('', { db: memdown })
+  var logs = levelLogs(level, { valueEncoding: 'json' })
+  var blobs = require('abstract-blob-store')()
+  var log = pino({ }, devnull())
+  var emitter = new (require('events').EventEmitter)()
+  var handler = require('./')(log, logs, blobs, emitter)
+  var server = net.createServer()
+    .on('connection', handler)
+    .on('close', function() {
+      level.close() })
+    .listen(0, function() {
+      var serverPort = this.address().port
+      var clients = []
+      for (var n = 0; n < numberOfClients; n++) {
+        var client = net.connect(serverPort)
+        var clientJSON = duplexJSON(client)
+        clients.push(clientJSON) }
+      if (numberOfClients === 1) {
+        callback(clients[0], server) }
+      else {
+        callback(clients, server) } }) }
