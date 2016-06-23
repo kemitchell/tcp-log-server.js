@@ -36,16 +36,16 @@ module.exports = function(serverLog, logs, blobs, emitter) {
     // Phase 1. Streaming entries from the LevelUP store, fetching
     //          their content from the blob store.
     //
-    // Phase 2. Sending buffered entries that were appended while the
+    // Phase 2. Sending buffered entries that were written while the
     //          read was streaming.
     //
-    // Phase 3. Sending entries as they are appended.
+    // Phase 3. Sending entries as they are written.
     //
     // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
     // relevant places below.
 
     // New entries are emitted as they are made.
-    emitter.on('appended', function(log, index, entry) {
+    emitter.on('wrote', function(log, index, entry) {
       // If this connection is reading the log.
       if (log in reading) {
         var read = reading[log]
@@ -72,7 +72,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
     json.on('data', function(message) {
       serverLog.info({ event: 'message', message: message })
       if (readMessage(message)) { onReadMessage(message) }
-      else if(appendMessage(message)) { onAppendMessage(message) } })
+      else if(writeMessage(message)) { onWriteMessage(message) } })
 
     function onReadMessage(message) {
       var log = message.log
@@ -111,7 +111,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
           delete reading[log] })
         .once('end', function() {
           streamLog.info({ event: 'end' })
-          // Phase 2: Entries may have been appended while we were
+          // Phase 2: Entries may have been written while we were
           // streaming from LevelUP. Send them now.
           read.buffer.forEach(function(message) {
             sendEntry(log, message.index, message.key, message.entry) })
@@ -121,7 +121,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
           read.buffer = null
           reading[log].doneStreaming = true }) }
 
-    function onAppendMessage(message) {
+    function onWriteMessage(message) {
       var log = message.log
       var hash = sha256(stringify(message.entry))
       var writeLog = serverLog.child({ hash: hash, log: log })
@@ -143,13 +143,13 @@ module.exports = function(serverLog, logs, blobs, emitter) {
                   log: message.log,
                   error: error.toString() }) }
             else {
-              writeLog.info({ event: 'appended' })
+              writeLog.info({ event: 'wrote' })
               json.write(
                 { replyTo: message.id,
                   log: message.log,
-                  event: 'appended' })
+                  event: 'wrote' })
               // Emit an event.
-              emitter.emit('appended', log, index, message.entry) } }) })
+              emitter.emit('wrote', log, index, message.entry) } }) })
         .end(stringify(message.entry), 'utf8') }
 
     function sendEntry(log, index, entry) {
@@ -163,10 +163,10 @@ function readMessage(argument) {
     has(argument, 'from', isPositiveInteger) &&
     has(argument, 'log', isString) ) }
 
-function appendMessage(argument) {
+function writeMessage(argument) {
   return (
     isMessage(argument) &&
-    has(argument, 'type', 'append') &&
+    has(argument, 'type', 'write') &&
     has(argument, 'log', isString) &&
     has(argument, 'entry', function(entry) {
       return ( typeof entry === 'object' ) }) ) }

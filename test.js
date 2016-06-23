@@ -12,7 +12,7 @@ var uuid = require('uuid').v4
 tape('simple sync', function(test) {
   testConnections(1, function(client, server) {
     var log = 'test'
-    var appendUUID = uuid()
+    var writeUUID = uuid()
     var readUUID = uuid()
     var messageCount = 0
     client.on('data', function(data) {
@@ -20,8 +20,8 @@ tape('simple sync', function(test) {
       if (messageCount ===  1) {
         test.deepEqual(
           data,
-          { event: 'appended', log: log, replyTo: appendUUID },
-          'first message confirms append') }
+          { event: 'wrote', log: log, replyTo: writeUUID },
+          'first message confirms write') }
       else if (messageCount === 2) {
         test.deepEqual(
           data,
@@ -30,14 +30,14 @@ tape('simple sync', function(test) {
         client.end()
         server.close()
         test.end() } })
-    client.write({ log: log, type: 'append', entry: { a: 1 }, id: appendUUID })
+    client.write({ log: log, type: 'write', entry: { a: 1 }, id: writeUUID })
     client.write({ log: log, type: 'read', from: 0, id: readUUID }) }) })
 
 tape('writes before and after read', function(test) {
   testConnections(1, function(client, server) {
     var log = 'test'
-    var firstAppendUUID = uuid()
-    var secondAppendUUID = uuid()
+    var firstWriteUUID = uuid()
+    var secondWriteUUID = uuid()
     var readUUID = uuid()
     var messageCount = 0
     var messages = [ ]
@@ -60,9 +60,9 @@ tape('writes before and after read', function(test) {
         client.end()
         server.close()
         test.end() } })
-    client.write({ log: log, type: 'append', entry: { a: 1 }, id: firstAppendUUID })
+    client.write({ log: log, type: 'write', entry: { a: 1 }, id: firstWriteUUID })
     client.write({ log: log, type: 'read', from: 0, id: readUUID })
-    client.write({ log: log, type: 'append', entry: { b: 2 }, id: secondAppendUUID }) }) })
+    client.write({ log: log, type: 'write', entry: { b: 2 }, id: secondWriteUUID }) }) })
 
 tape('two clients', function(test) {
   testConnections(2, function(clients, server) {
@@ -88,8 +88,8 @@ tape('two clients', function(test) {
         finish() } })
     ana.write({ log: log, type: 'read', from: 0, id: uuid() })
     bob.write({ log: log, type: 'read', from: 0, id: uuid() })
-    ana.write({ log: log, type: 'append', entry: anaWasHere, id: uuid() })
-    bob.write({ log: log, type: 'append', entry: bobWasHere, id: uuid() }) }) })
+    ana.write({ log: log, type: 'write', entry: anaWasHere, id: uuid() })
+    bob.write({ log: log, type: 'write', entry: bobWasHere, id: uuid() }) }) })
 
 tape('old entry', function(test) {
   testConnections(1, function(client, server) {
@@ -101,7 +101,7 @@ tape('old entry', function(test) {
         client.end()
         server.close()
         test.end() } })
-    client.write({ log: log, type: 'append', entry: entry, id: uuid() })
+    client.write({ log: log, type: 'write', entry: entry, id: uuid() })
     client.write({ log: log, type: 'read', from: 0, id: uuid() }) }) })
 
 tape('read from future index', function(test) {
@@ -118,8 +118,8 @@ tape('read from future index', function(test) {
           server.close()
           test.end() } } })
     client.write({ log: log, type: 'read', from: 2, id: uuid() })
-    client.write({ log: log, type: 'append', entry: entries[0], id: uuid() })
-    client.write({ log: log, type: 'append', entry: entries[1], id: uuid() }) }) })
+    client.write({ log: log, type: 'write', entry: entries[0], id: uuid() })
+    client.write({ log: log, type: 'write', entry: entries[1], id: uuid() }) }) })
 
 function testConnections(numberOfClients, callback) {
   memdown.clearGlobalStore()
