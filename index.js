@@ -89,11 +89,11 @@ module.exports = function(serverLog, logs, blobs, emitter) {
             .on('error', function(error) {
               errored = true
               serverLog.error(error)
-              json.write({
-                replyTo: message.id,
-                log: message.log,
-                blob: data.value,
-                error: error.toString() }) })
+              json.write(
+                { replyTo: message.id,
+                  log: message.log,
+                  blob: data.value,
+                  error: error.toString() }) })
             .on('end', function() {
               if (!errored) {
                 var value = JSON.parse(Buffer.concat(chunks))
@@ -123,10 +123,10 @@ module.exports = function(serverLog, logs, blobs, emitter) {
       blobs.createWriteStream({ key: hashToPath(hash) })
         .on('error', function(error) {
           writeLog.error(error)
-          json.write({
-            replyTo: message.id,
-            log: message.log,
-            error: error.toString() }) })
+          json.write(
+            { replyTo: message.id,
+              log: message.log,
+              error: error.toString() }) })
         .on('finish', function() {
           // Append an entry in the LevelUP log with the hash of the payload.
           entriesQueue.push({ log: log, hash: hash }, function(error, index) {
