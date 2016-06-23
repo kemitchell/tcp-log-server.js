@@ -52,15 +52,22 @@ module.exports = function(serverLog, logs, blobs, emitter) {
         // Do not send entries from earlier in the log than requested.
         if (replay.from <= index) {
           // Phase 3:
-          if (replay.doneStreaming) { sendEntry(log, index, entry) }
+          if (replay.doneStreaming) {
+            serverLog.info({ event: 'forward', log: log, index: index })
+            sendEntry(log, index, entry) }
           // Waiting for Phase 2
-          else { replay.buffer.push({ index: index, entry: entry }) } } } })
+          else {
+            serverLog.info({ event: 'buffer', log: log, index: index })
+            replay.buffer.push({ index: index, entry: entry }) } } } })
 
     // An asynchronous queue for appending hashes to logs. Ensures that
     // each append operation can read the head of the log and number
     // itself appropriately.
     var entriesQueue = queue(function(task, done) {
-      logs.append(task.log, task.hash, done) })
+      var log = task.log
+      var hash = task.hash
+      serverLog.info({ event: 'appending', log: log, hash: hash })
+      logs.append(log, hash, done) })
 
     json.on('data', function(message) {
       serverLog.info({ event: 'message', message: message })
@@ -73,6 +80,8 @@ module.exports = function(serverLog, logs, blobs, emitter) {
       var streamOptions = { since: message.from }
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
+      var streamLog = serverLog.child({ phase: 'stream', log: log })
+      streamLog.info({ event: 'create' })
       var stream = logs.createReadStream(log, streamOptions)
       replay.stream = stream
       replaying[log] = replay
@@ -90,6 +99,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
               json.write({
                 replyTo: message.id,
                 log: message.log,
+                blob: data.value,
                 error: error.toString() }) })
             .on('end', function() {
               if (!errored) {
@@ -100,6 +110,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
           sendEntry(log, -1, { error: error.toString() })
           delete replaying[log] })
         .once('end', function() {
+          streamLog.info({ event: 'end' })
           // Phase 2: Entries may have been appended while we were
           // streaming from LevelUP. Send them now.
           replay.buffer.forEach(function(message) {
@@ -113,9 +124,11 @@ module.exports = function(serverLog, logs, blobs, emitter) {
     function onAppendMessage(message) {
       var log = message.log
       var hash = sha256(stringify(message.entry))
+      var writeLog = serverLog.child({ hash: hash, log: log })
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({ key: hashToPath(hash) })
         .on('error', function(error) {
+          writeLog.error(error)
           json.write({
             replyTo: message.id,
             log: message.log,
@@ -124,11 +137,13 @@ module.exports = function(serverLog, logs, blobs, emitter) {
           // Append an entry in the LevelUP log with the hash of the payload.
           entriesQueue.push({ log: log, hash: hash }, function(error, index) {
             if (error) {
+              writeLog.error(error)
               json.write(
                 { replyTo: message.id,
                   log: message.log,
                   error: error.toString() }) }
             else {
+              writeLog.info({ event: 'appended' })
               json.write(
                 { replyTo: message.id,
                   log: message.log,
@@ -138,7 +153,8 @@ module.exports = function(serverLog, logs, blobs, emitter) {
         .end(stringify(message.entry), 'utf8') }
 
     function sendEntry(log, index, entry) {
-      json.write({ log: log, index: index, entry: entry }) } } }
+      json.write({ log: log, index: index, entry: entry })
+      serverLog.info({ event: 'sent', log: log, index: index }) } } }
 
 function replayMessage(argument) {
   return (
