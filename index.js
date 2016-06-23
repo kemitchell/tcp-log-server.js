@@ -16,11 +16,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
 
-    // A map tracking logs for which this connection has requested read.
-    //
-    // Keys are log name strings.
-    //
-    // Values are objects with:
+    // An object recording the logs for which this connection has requested read.
     //
     // - doneStreaming (boolean): The server is done streaming old entries.
     //
@@ -29,7 +25,7 @@ module.exports = function(serverLog, logs, blobs, emitter) {
     //
     // - stream (stream): The stream of log entries, or null when
     //   doneStreaming is true.
-    var reading = { }
+    var reading = false
 
     // A read advances, in order, through three phases:
     //
@@ -44,22 +40,6 @@ module.exports = function(serverLog, logs, blobs, emitter) {
     // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
     // relevant places below.
 
-    // New entries are emitted as they are made.
-    emitter.on('wrote', function(log, index, entry) {
-      // If this connection is reading the log.
-      if (log in reading) {
-        var read = reading[log]
-        // Do not send entries from earlier in the log than requested.
-        if (read.from <= index) {
-          // Phase 3:
-          if (read.doneStreaming) {
-            serverLog.info({ event: 'forward', log: log, index: index })
-            sendEntry(log, index, entry) }
-          // Waiting for Phase 2
-          else {
-            serverLog.info({ event: 'buffer', log: log, index: index })
-            read.buffer.push({ index: index, entry: entry }) } } } })
-
     // An asynchronous queue for appending hashes to logs. Ensures that
     // each append operation can read the head of the log and number
     // itself appropriately.
@@ -71,20 +51,33 @@ module.exports = function(serverLog, logs, blobs, emitter) {
 
     json.on('data', function(message) {
       serverLog.info({ event: 'message', message: message })
-      if (readMessage(message)) { onReadMessage(message) }
+      if (readMessage(message) && !reading) { onReadMessage(message) }
       else if(writeMessage(message)) { onWriteMessage(message) } })
 
     function onReadMessage(message) {
       var log = message.log
-      var read = { doneStreaming: false, buffer: [ ], from: message.from }
-      var streamOptions = { since: message.from }
+      reading = { doneStreaming: false, buffer: [ ], from: message.from }
+
+      // New entries are emitted as they are made.
+      var onAppend = function(index, entry) {
+        // Do not send entries from earlier in the log than requested.
+        if (reading.from <= index) {
+          // Phase 3:
+          if (reading.doneStreaming) {
+            serverLog.info({ event: 'forward', log: log, index: index })
+            sendEntry(log, index, entry) }
+          // Waiting for Phase 2
+          else {
+            serverLog.info({ event: 'buffer', log: log, index: index })
+            reading.buffer.push({ index: index, entry: entry }) } } }
+      emitter.addListener(log, onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
       var streamLog = serverLog.child({ phase: 'stream', log: log })
       streamLog.info({ event: 'create' })
+      var streamOptions = { since: message.from }
       var stream = logs.createReadStream(log, streamOptions)
-      read.stream = stream
-      reading[log] = read
+      reading.stream = stream
       stream
         .on('data', function(data) {
           var chunks = [ ]
@@ -107,19 +100,20 @@ module.exports = function(serverLog, logs, blobs, emitter) {
                 sendEntry(log, data.seq, value) } }) })
         .once('error', function(error) {
           streamLog.error(error)
-          sendEntry(log, -1, { error: error.toString() })
-          delete reading[log] })
+          sendEntry(log, -1, { error: error.toString() }, true)
+          emitter.removeListener(log, onAppend)
+          reading = false })
         .once('end', function() {
           streamLog.info({ event: 'end' })
           // Phase 2: Entries may have been written while we were
           // streaming from LevelUP. Send them now.
-          read.buffer.forEach(function(message) {
+          reading.buffer.forEach(function(message) {
             sendEntry(log, message.index, message.key, message.entry) })
           // Mark the stream done so messages sent via the
           // EventEmitter will be written out to the socket, rather
           // than buffered.
-          read.buffer = null
-          reading[log].doneStreaming = true }) }
+          reading.buffer = null
+          reading.doneStreaming = true }) }
 
     function onWriteMessage(message) {
       var log = message.log
@@ -149,11 +143,11 @@ module.exports = function(serverLog, logs, blobs, emitter) {
                   log: message.log,
                   event: 'wrote' })
               // Emit an event.
-              emitter.emit('wrote', log, index, message.entry) } }) })
+              emitter.emit(log, index, message.entry) } }) })
         .end(stringify(message.entry), 'utf8') }
 
-    function sendEntry(log, index, entry) {
-      json.write({ log: log, index: index, entry: entry })
+    function sendEntry(log, index, entry, end) {
+      json[end ? 'end' : 'write']({ log: log, index: index, entry: entry })
       serverLog.info({ event: 'sent', log: log, index: index }) } } }
 
 function readMessage(argument) {
