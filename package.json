@@ -17,10 +17,11 @@
     "deep-equal": "^1.0.1",
     "dev-null": "^0.1.1",
     "memdown": "^1.2.0",
+    "standard": "^7.1.2",
     "tape": "^4.6.0"
   },
   "scripts": {
-    "test": "node test.js"
-  },
-  "version": "1.0.0"
+    "test": "node test.js",
+    "lint": "standard"
+  }
 }
