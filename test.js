@@ -89,6 +89,8 @@ tape('two clients', function (test) {
     var finished = 0
     function finish () {
       if (++finished === 2) {
+        ana.end()
+        bob.end()
         server.close()
         test.end()
       }
