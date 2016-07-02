@@ -143,6 +143,18 @@ tape('read from future index', function (test) {
   })
 })
 
+tape('invalid message', function (test) {
+  testConnections(1, function (client, server) {
+    client.on('data', function (data) {
+      test.deepEqual(data, {error: 'invalid message'})
+      client.end()
+      server.close()
+      test.end()
+    })
+    client.write({type: 'nonsense'})
+  })
+})
+
 function testConnections (numberOfClients, callback) {
   memdown.clearGlobalStore()
   // Use an in-memory storage back-end.

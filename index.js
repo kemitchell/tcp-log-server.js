@@ -8,9 +8,9 @@ var LOG_NAME = 'log'
 
 module.exports = function (serverLog, logs, blobs, emitter) {
   return function (connection) {
-    // Child log for this connection.
     serverLog = serverLog.child({connection: uuid.v4()})
     serverLog.info({event: 'connected'})
+
     connection
       .on('end', function () { serverLog.info({event: 'end'}) })
       .on('close', function (error) {
@@ -20,7 +20,8 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
 
-    // An object recording the logs for which this connection has requested read.
+    // An object recording information about the state of reading from
+    // the log.
     //
     // - doneStreaming (boolean): The server is done streaming old entries.
     //
@@ -44,9 +45,9 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
     // relevant places below.
 
-    // An asynchronous queue for appending hashes to logs. Ensures that
-    // each append operation can read the head of the log and number
-    // itself appropriately.
+    // An asynchronous queue for appending hashes to the log. Ensures
+    // that each append operation can read the head of the log and
+    // number itself appropriately.
     var entriesQueue = queue(function (hash, done) {
       serverLog.info({event: 'appending', hash: hash})
       logs.append(LOG_NAME, hash, done)
@@ -56,6 +57,10 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       serverLog.info({event: 'message', message: message})
       if (readMessage(message) && !reading) onReadMessage(message)
       else if (writeMessage(message)) onWriteMessage(message)
+      else {
+        serverLog.warn({event: 'invalid', message: message})
+        json.write({error: 'invalid message'})
+      }
     })
 
     function onReadMessage (message) {
