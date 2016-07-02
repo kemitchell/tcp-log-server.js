@@ -9,7 +9,11 @@ var LOG_NAME = 'log'
 module.exports = function (serverLog, logs, blobs, emitter) {
   return function (connection) {
     serverLog = serverLog.child({connection: uuid.v4()})
-    serverLog.info({event: 'connected'})
+    serverLog.info({
+      event: 'connected',
+      address: connection.remoteAddress,
+      port: connection.removePort
+    })
 
     connection
       .on('end', function () { serverLog.info({event: 'end'}) })
@@ -19,6 +23,12 @@ module.exports = function (serverLog, logs, blobs, emitter) {
 
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
+      .on('error', function () {
+        serverLog.error({event: 'invalid JSON'})
+        reading = false
+        emitter.removeListener('entry', onAppend)
+        connection.destroy()
+      })
 
     // An object recording information about the state of reading from
     // the log.
@@ -66,21 +76,6 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     function onReadMessage (message) {
       reading = {doneStreaming: false, buffer: [], from: message.from}
 
-      // New entries are emitted as they are made.
-      var onAppend = function (index, entry) {
-        // Do not send entries from earlier in the log than requested.
-        if (reading.from <= index) {
-          // Phase 3:
-          if (reading.doneStreaming) {
-            serverLog.info({event: 'forward', index: index})
-            sendEntry(index, entry)
-          // Waiting for Phase 2
-          } else {
-            serverLog.info({event: 'buffer', index: index})
-            reading.buffer.push({index: index, entry: entry})
-          }
-        }
-      }
       emitter.addListener('entry', onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
@@ -128,6 +123,21 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           reading.buffer = null
           reading.doneStreaming = true
         })
+    }
+
+    function onAppend (index, entry) {
+      // Do not send entries from earlier in the log than requested.
+      if (reading.from <= index) {
+        // Phase 3:
+        if (reading.doneStreaming) {
+          serverLog.info({event: 'forward', index: index})
+          sendEntry(index, entry)
+        // Waiting for Phase 2
+        } else {
+          serverLog.info({event: 'buffer', index: index})
+          reading.buffer.push({index: index, entry: entry})
+        }
+      }
     }
 
     function onWriteMessage (message) {

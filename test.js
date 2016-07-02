@@ -155,6 +155,18 @@ tape('invalid message', function (test) {
   })
 })
 
+tape('invalid json', function (test) {
+  testConnections(0, function (_, server, port) {
+    var client = net.connect({port: port})
+      .on('connect', function () { client.write('not JSON\n') })
+      .on('close', function () {
+        test.pass('connection closed by server')
+        server.close()
+        test.end()
+      })
+  })
+})
+
 function testConnections (numberOfClients, callback) {
   memdown.clearGlobalStore()
   // Use an in-memory storage back-end.
@@ -177,7 +189,7 @@ function testConnections (numberOfClients, callback) {
         var clientJSON = duplexJSON(client)
         clients.push(clientJSON)
       }
-      if (numberOfClients === 1) callback(clients[0], server)
-      else callback(clients, server)
+      if (numberOfClients === 1) callback(clients[0], server, serverPort)
+      else callback(clients, server, serverPort)
     })
 }
