@@ -4,6 +4,8 @@ var sha256 = require('sha256')
 var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
 
+var LOG_NAME = 'log'
+
 module.exports = function (serverLog, logs, blobs, emitter) {
   return function (connection) {
     // Child log for this connection.
@@ -45,11 +47,9 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     // An asynchronous queue for appending hashes to logs. Ensures that
     // each append operation can read the head of the log and number
     // itself appropriately.
-    var entriesQueue = queue(function (task, done) {
-      var log = task.log
-      var hash = task.hash
-      serverLog.info({event: 'appending', log: log, hash: hash})
-      logs.append(log, hash, done)
+    var entriesQueue = queue(function (hash, done) {
+      serverLog.info({event: 'appending', hash: hash})
+      logs.append(LOG_NAME, hash, done)
     })
 
     json.on('data', function (message) {
@@ -59,7 +59,6 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     })
 
     function onReadMessage (message) {
-      var log = message.log
       reading = {doneStreaming: false, buffer: [], from: message.from}
 
       // New entries are emitted as they are made.
@@ -68,22 +67,22 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         if (reading.from <= index) {
           // Phase 3:
           if (reading.doneStreaming) {
-            serverLog.info({event: 'forward', log: log, index: index})
-            sendEntry(log, index, entry)
+            serverLog.info({event: 'forward', index: index})
+            sendEntry(index, entry)
           // Waiting for Phase 2
           } else {
-            serverLog.info({event: 'buffer', log: log, index: index})
+            serverLog.info({event: 'buffer', index: index})
             reading.buffer.push({index: index, entry: entry})
           }
         }
       }
-      emitter.addListener(log, onAppend)
+      emitter.addListener('entry', onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
-      var streamLog = serverLog.child({phase: 'stream', log: log})
+      var streamLog = serverLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
       var streamOptions = {since: message.from}
-      var stream = logs.createReadStream(log, streamOptions)
+      var stream = logs.createReadStream(LOG_NAME, streamOptions)
       reading.stream = stream
       stream
         .on('data', function (data) {
@@ -96,24 +95,19 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             .on('error', function (error) {
               errored = true
               serverLog.error(error)
-              json.write({
-                replyTo: message.id,
-                log: message.log,
-                blob: data.value,
-                error: error.toString()
-              })
+              json.write({blob: data.value, error: error.toString()})
             })
             .on('end', function () {
               if (!errored) {
                 var value = JSON.parse(Buffer.concat(chunks))
-                sendEntry(log, data.seq, value)
+                sendEntry(data.seq, value)
               }
             })
         })
         .once('error', function (error) {
           streamLog.error(error)
-          sendEntry(log, -1, {error: error.toString()}, true)
-          emitter.removeListener(log, onAppend)
+          sendEntry(-1, {error: error.toString()}, true)
+          emitter.removeListener('entry', onAppend)
           reading = false
         })
         .once('end', function () {
@@ -121,7 +115,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           // Phase 2: Entries may have been written while we were
           // streaming from LevelUP. Send them now.
           reading.buffer.forEach(function (message) {
-            sendEntry(log, message.index, message.key, message.entry)
+            sendEntry(message.index, message.key, message.entry)
           })
           // Mark the stream done so messages sent via the
           // EventEmitter will be written out to the socket, rather
@@ -132,46 +126,33 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     }
 
     function onWriteMessage (message) {
-      var log = message.log
       var hash = sha256(stringify(message.entry))
-      var writeLog = serverLog.child({ hash: hash, log: log })
+      var writeLog = serverLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({key: hashToPath(hash)})
         .once('error', function (error) {
           writeLog.error(error)
-          json.write({
-            replyTo: message.id,
-            log: message.log,
-            error: error.toString()
-          })
+          json.write({replyTo: message.id, error: error.toString()})
         })
         .once('finish', function () {
           // Append an entry in the LevelUP log with the hash of the payload.
-          entriesQueue.push({log: log, hash: hash}, function (error, index) {
+          entriesQueue.push(hash, function (error, index) {
             if (error) {
               writeLog.error(error)
-              json.write({
-                replyTo: message.id,
-                log: message.log,
-                error: error.toString()
-              })
+              json.write({replyTo: message.id, error: error.toString()})
             } else {
-              writeLog.info({ event: 'wrote' })
-              json.write({
-                replyTo: message.id,
-                log: message.log,
-                event: 'wrote'
-              })
+              writeLog.info({event: 'wrote'})
+              json.write({replyTo: message.id, event: 'wrote'})
               // Emit an event.
-              emitter.emit(log, index, message.entry)
+              emitter.emit('entry', index, message.entry)
             }
           })
         })
         .end(stringify(message.entry), 'utf8') }
 
-    function sendEntry (log, index, entry, end) {
-      json[end ? 'end' : 'write']({log: log, index: index, entry: entry})
-      serverLog.info({event: 'sent', log: log, index: index})
+    function sendEntry (index, entry, end) {
+      json[end ? 'end' : 'write']({index: index, entry: entry})
+      serverLog.info({event: 'sent', index: index})
     }
   }
 }
@@ -192,13 +173,6 @@ function writeMessage (argument) {
     has(argument, 'entry', function (entry) {
       return typeof entry === 'object'
     })
-  )
-}
-
-function isMessage (argument) {
-  return (
-    (typeof argument === 'object') &&
-    has(argument, 'id', function (id) { return id.length > 0 })
   )
 }
 

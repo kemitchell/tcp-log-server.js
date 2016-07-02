@@ -11,7 +11,6 @@ var uuid = require('uuid').v4
 
 tape('simple sync', function (test) {
   testConnections(1, function (client, server) {
-    var log = 'test'
     var writeUUID = uuid()
     var readUUID = uuid()
     var messageCount = 0
@@ -20,26 +19,25 @@ tape('simple sync', function (test) {
       if (messageCount === 1) {
         test.deepEqual(
           data,
-          {event: 'wrote', log: log, replyTo: writeUUID},
+          {event: 'wrote', replyTo: writeUUID},
           'first message confirms write')
       } else if (messageCount === 2) {
         test.deepEqual(
           data,
-          {log: log, index: 1, entry: {a: 1}},
+          {index: 1, entry: {a: 1}},
           'second message reads entry')
         client.end()
         server.close()
         test.end()
       }
     })
-    client.write({log: log, type: 'write', entry: {a: 1}, id: writeUUID})
-    client.write({log: log, type: 'read', from: 0, id: readUUID})
+    client.write({type: 'write', entry: {a: 1}, id: writeUUID})
+    client.write({type: 'read', from: 0, id: readUUID})
   })
 })
 
 tape('writes before and after read', function (test) {
   testConnections(1, function (client, server) {
-    var log = 'test'
     var firstWriteUUID = uuid()
     var secondWriteUUID = uuid()
     var readUUID = uuid()
@@ -51,19 +49,13 @@ tape('writes before and after read', function (test) {
       if (messageCount === 4) {
         test.assert(
           messages.some(function (element) {
-            return deepEqual(
-              element,
-              {log: log, index: 1, entry: {a: 1}}
-            )
+            return deepEqual(element, {index: 1, entry: {a: 1}})
           }),
           'reads first entry'
         )
         test.assert(
           messages.some(function (element) {
-            return deepEqual(
-              element,
-              {log: log, index: 2, entry: {b: 2}}
-            )
+            return deepEqual(element, {index: 2, entry: {b: 2}})
           }),
           'reads second entry'
         )
@@ -72,83 +64,82 @@ tape('writes before and after read', function (test) {
         test.end()
       }
     })
-    client.write({log: log, type: 'write', entry: {a: 1}, id: firstWriteUUID})
-    client.write({log: log, type: 'read', from: 0, id: readUUID})
-    client.write({log: log, type: 'write', entry: {b: 2}, id: secondWriteUUID})
+    client.write({type: 'write', entry: {a: 1}, id: firstWriteUUID})
+    client.write({type: 'read', from: 0, id: readUUID})
+    client.write({type: 'write', entry: {b: 2}, id: secondWriteUUID})
   })
 })
 
 tape('two clients', function (test) {
   testConnections(2, function (clients, server) {
-    var log = 'test'
     var ana = clients[0]
     var bob = clients[1]
     var anaWasHere = {message: 'Ana was here.'}
     var bobWasHere = {message: 'Bob was here.'}
-    var finished = 0
+
+    var anaFinished = false
+    var bobFinished = false
     function finish () {
-      if (++finished === 2) {
+      if (anaFinished && bobFinished) {
         server.close()
         test.end()
       }
     }
     ana.on('data', function (data) {
-      if (data.log === log && deepEqual(data.entry, bobWasHere)) {
+      if (deepEqual(data.entry, bobWasHere)) {
         test.pass('receives entry from other client')
         ana.end()
+        anaFinished = true
         finish()
       }
     })
     bob.on('data', function (data) {
-      if (data.log === log && deepEqual(data.entry, anaWasHere)) {
+      if (deepEqual(data.entry, anaWasHere)) {
         test.pass('receives entry from other client')
         bob.end()
+        bobFinished = true
         finish()
       }
     })
-    ana.write({log: log, type: 'read', from: 0, id: uuid()})
-    bob.write({log: log, type: 'read', from: 0, id: uuid()})
-    ana.write({log: log, type: 'write', entry: anaWasHere, id: uuid()})
-    bob.write({log: log, type: 'write', entry: bobWasHere, id: uuid()})
+    ana.write({type: 'read', from: 0})
+    bob.write({type: 'read', from: 0})
+    ana.write({type: 'write', entry: anaWasHere, id: uuid()})
+    bob.write({type: 'write', entry: bobWasHere, id: uuid()})
   })
 })
 
 tape('old entry', function (test) {
   testConnections(1, function (client, server) {
-    var log = 'test'
     var entry = {a: 1}
     client.on('data', function (data) {
-      if (data.log === log && deepEqual(data.entry, entry)) {
+      if (deepEqual(data.entry, entry)) {
         test.pass('receives old entry')
         client.end()
         server.close()
         test.end()
       }
     })
-    client.write({log: log, type: 'write', entry: entry, id: uuid()})
-    client.write({log: log, type: 'read', from: 0, id: uuid()})
+    client.write({type: 'write', entry: entry, id: uuid()})
+    client.write({type: 'read', from: 0, id: uuid()})
   })
 })
 
 tape('read from future index', function (test) {
   testConnections(1, function (client, server) {
-    var log = 'test'
     var entries = [{a: 1}, {b: 2}]
     client.on('data', function (data) {
-      if (data.log === log) {
-        if (deepEqual(data.entry, entries[0])) {
-          test.fail('received earlier entry')
-        } else if (deepEqual(data.entry, entries[1])) {
-          test.pass('receives newer entry')
-          client.end()
-          server.close()
-          test.end()
-        }
+      if (deepEqual(data.entry, entries[0])) {
+        test.fail('received earlier entry')
+      } else if (deepEqual(data.entry, entries[1])) {
+        test.pass('receives newer entry')
+        client.end()
+        server.close()
+        test.end()
       }
     })
-    client.write({log: log, type: 'read', from: 2, id: uuid()})
-    client.write({log: log, type: 'write', entry: entries[0], id: uuid()})
-    client.write({log: log, type: 'write', entry: entries[1], id: uuid()})
+    client.write({type: 'read', from: 2, id: uuid()})
+    client.write({type: 'write', entry: entries[0], id: uuid()})
+    client.write({type: 'write', entry: entries[1], id: uuid()})
   })
 })
 
