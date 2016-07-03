@@ -9,28 +9,16 @@ var pino = require('pino')
 var tape = require('tape')
 var uuid = require('uuid').v4
 
-tape('simple sync', function (test) {
-  testConnections(1, function (client, server) {
-    var writeUUID = uuid()
-    var readUUID = uuid()
-    var messages = []
-    var expected = [
-      {current: true},
-      {event: 'wrote', id: writeUUID},
-      {index: 1, entry: {a: 1}}
-    ]
-    client.on('data', function (data) {
-      messages.push(data)
-      if (messages.length === expected.length) {
-        test.deepEqual(messages, expected)
-        client.end()
-        server.close()
-        test.end()
-      }
-    })
-    client.write({type: 'write', entry: {a: 1}, id: writeUUID})
-    client.write({type: 'read', from: 0, id: readUUID})
-  })
+simpleTest('simple sync', {
+  send: [
+    {type: 'write', entry: {a: 1}, id: 'abc123'},
+    {type: 'read', from: 0}
+  ],
+  receive: [
+    {current: true},
+    {event: 'wrote', id: 'abc123'},
+    {index: 1, entry: {a: 1}}
+  ]
 })
 
 tape('writes before and after read', function (test) {
@@ -59,6 +47,21 @@ tape('writes before and after read', function (test) {
     client.write({type: 'read', from: 0, id: readUUID})
     client.write({type: 'write', entry: {b: 2}, id: secondWriteUUID})
   })
+})
+
+simpleTest('writes before and after read', {
+  send: [
+    {type: 'write', entry: {a: 1}, id: 'first write'},
+    {type: 'read', from: 0},
+    {type: 'write', entry: {b: 2}, id: 'second write'}
+  ],
+  receive: [
+    {current: true},
+    {event: 'wrote', id: 'first write'},
+    {index: 1, entry: {a: 1}},
+    {event: 'wrote', id: 'second write'},
+    {index: 2, entry: {b: 2}}
+  ]
 })
 
 tape('two clients', function (test) {
@@ -191,6 +194,27 @@ tape('invalid json', function (test) {
       })
   })
 })
+
+function simpleTest (name, options) {
+  tape(name, function (test) {
+    testConnections(1, function (client, server) {
+      var expected = options.receive
+      var received = []
+      client.on('data', function (data) {
+        received.push(data)
+        if (received.length === expected.length) {
+          test.deepEqual(received, expected)
+          client.end()
+          server.close()
+          test.end()
+        }
+      })
+      options.send.forEach(function (message) {
+        client.write(message)
+      })
+    })
+  })
+}
 
 function testConnections (numberOfClients, callback) {
   memdown.clearGlobalStore()
