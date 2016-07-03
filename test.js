@@ -7,7 +7,6 @@ var memdown = require('memdown')
 var net = require('net')
 var pino = require('pino')
 var tape = require('tape')
-var uuid = require('uuid').v4
 
 simpleTest('confirms writes', {
   send: [{type: 'write', entry: {a: 1}, id: 'abc123'}],
@@ -37,13 +36,11 @@ simpleTest('simple sync', {
 
 tape('writes before and after read', function (test) {
   testConnections(1, function (client, server) {
-    var firstWriteUUID = uuid()
-    var secondWriteUUID = uuid()
     var messages = []
     var expected = [
       {current: true},
-      {event: 'wrote', id: firstWriteUUID, index: 1},
-      {event: 'wrote', id: secondWriteUUID, index: 2}
+      {event: 'wrote', id: 'first', index: 1},
+      {event: 'wrote', id: 'second', index: 2}
     ]
     client.on('data', function (data) {
       messages.push(data)
@@ -54,9 +51,9 @@ tape('writes before and after read', function (test) {
         test.end()
       }
     })
-    client.write({type: 'write', entry: {a: 1}, id: firstWriteUUID})
+    client.write({type: 'write', entry: {a: 1}, id: 'first'})
     client.write({type: 'read', from: 0})
-    client.write({type: 'write', entry: {b: 2}, id: secondWriteUUID})
+    client.write({type: 'write', entry: {b: 2}, id: 'second'})
   })
 })
 
@@ -106,8 +103,8 @@ tape('two clients', function (test) {
     })
     ana.write({type: 'read', from: 0})
     bob.write({type: 'read', from: 0})
-    ana.write({type: 'write', entry: anaWasHere, id: uuid()})
-    bob.write({type: 'write', entry: bobWasHere, id: uuid()})
+    ana.write({type: 'write', entry: anaWasHere, id: 'first'})
+    bob.write({type: 'write', entry: bobWasHere, id: 'second'})
   })
 })
 
@@ -122,7 +119,7 @@ tape('old entry', function (test) {
         test.end()
       }
     })
-    client.write({type: 'write', entry: entry, id: uuid()})
+    client.write({type: 'write', entry: entry, id: 'first'})
     setTimeout(function () {
       client.write({type: 'read', from: 0})
     }, 25)
@@ -146,8 +143,8 @@ tape('read from future index', function (test) {
       }
     })
     readingClient.write({type: 'read', from: 2})
-    writingClient.write({type: 'write', entry: entries[0], id: uuid()})
-    writingClient.write({type: 'write', entry: entries[1], id: uuid()})
+    writingClient.write({type: 'write', entry: entries[0], id: 'first'})
+    writingClient.write({type: 'write', entry: entries[1], id: 'second'})
     writingClient.end()
   })
 })
@@ -157,7 +154,6 @@ tape('current signal', function (test) {
     var readingClient = clients[0]
     var writingClient = clients[1]
     var entries = [{a: 1}, {b: 2}, {c: 3}]
-    var uuids = [uuid(), uuid(), uuid()]
     var messages = []
     var expected = [
       {index: 1, entry: entries[0]},
@@ -174,12 +170,12 @@ tape('current signal', function (test) {
         test.end()
       }
     })
-    writingClient.write({type: 'write', entry: entries[0], id: uuids[0]})
-    writingClient.write({type: 'write', entry: entries[1], id: uuids[1]})
+    writingClient.write({type: 'write', entry: entries[0], id: 'first'})
+    writingClient.write({type: 'write', entry: entries[1], id: 'second'})
     setTimeout(function () {
       readingClient.write({type: 'read', from: 0})
       setTimeout(function () {
-        writingClient.end({type: 'write', entry: entries[2], id: uuids[2]})
+        writingClient.end({type: 'write', entry: entries[2], id: 'third'})
       }, 50)
     }, 50)
   })
