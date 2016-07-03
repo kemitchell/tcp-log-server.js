@@ -39,7 +39,6 @@ tape('writes before and after read', function (test) {
   testConnections(1, function (client, server) {
     var firstWriteUUID = uuid()
     var secondWriteUUID = uuid()
-    var readUUID = uuid()
     var messages = []
     var expected = [
       {current: true},
@@ -56,7 +55,7 @@ tape('writes before and after read', function (test) {
       }
     })
     client.write({type: 'write', entry: {a: 1}, id: firstWriteUUID})
-    client.write({type: 'read', from: 0, id: readUUID})
+    client.write({type: 'read', from: 0})
     client.write({type: 'write', entry: {b: 2}, id: secondWriteUUID})
   })
 })
@@ -125,7 +124,7 @@ tape('old entry', function (test) {
     })
     client.write({type: 'write', entry: entry, id: uuid()})
     setTimeout(function () {
-      client.write({type: 'read', from: 0, id: uuid()})
+      client.write({type: 'read', from: 0})
     }, 25)
   })
 })
@@ -146,7 +145,7 @@ tape('read from future index', function (test) {
         test.end()
       }
     })
-    readingClient.write({type: 'read', from: 2, id: uuid()})
+    readingClient.write({type: 'read', from: 2})
     writingClient.write({type: 'write', entry: entries[0], id: uuid()})
     writingClient.write({type: 'write', entry: entries[1], id: uuid()})
     writingClient.end()
@@ -178,7 +177,7 @@ tape('current signal', function (test) {
     writingClient.write({type: 'write', entry: entries[0], id: uuids[0]})
     writingClient.write({type: 'write', entry: entries[1], id: uuids[1]})
     setTimeout(function () {
-      readingClient.write({type: 'read', from: 0, id: uuid()})
+      readingClient.write({type: 'read', from: 0})
       setTimeout(function () {
         writingClient.end({type: 'write', entry: entries[2], id: uuids[2]})
       }, 50)
