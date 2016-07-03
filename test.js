@@ -122,6 +122,7 @@ tape('read from future index', function (test) {
   testConnections(1, function (client, server) {
     var entries = [{a: 1}, {b: 2}]
     client.on('data', function (data) {
+      /* istanbul ignore if */
       if (deepEqual(data.entry, entries[0])) {
         test.fail('received earlier entry')
       } else if (deepEqual(data.entry, entries[1])) {

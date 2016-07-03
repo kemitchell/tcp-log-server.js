@@ -16,14 +16,16 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     })
 
     connection
-      .on('end', function () { serverLog.info({event: 'end'}) })
-      .on('close', function (error) {
+      .once('end', function () { serverLog.info({event: 'end'}) })
+      .once('close', function (error) {
         serverLog.info({event: 'end', error: error})
       })
 
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
-      .on('error', function () { disconnect('invalid JSON') })
+      .once('error', /* istanbul ignore next */ function () {
+        disconnect('invalid JSON')
+      })
 
     // An object recording information about the state of reading from
     // the log.
@@ -81,24 +83,20 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       stream
         .on('data', function (data) {
           var chunks = []
-          var errored = false
           // Use the hash from LevelUP to look up the message data in
           // the blob store.
           blobs.createReadStream({key: hashToPath(data.value)})
             .on('data', function (chunk) { chunks.push(chunk) })
-            .on('error', function (error) {
-              errored = true
+            .once('error', /* istanbul ignore next */ function (error) {
               serverLog.error(error)
               json.write({blob: data.value, error: error.toString()})
             })
-            .on('end', function () {
-              if (!errored) {
-                var value = JSON.parse(Buffer.concat(chunks))
-                sendEntry(data.seq, value)
-              }
+            .once('end', function () {
+              var value = JSON.parse(Buffer.concat(chunks))
+              sendEntry(data.seq, value)
             })
         })
-        .once('error', function (error) {
+        .once('error', /* istanbul ignore next */ function (error) {
           disconnect(error.toString())
         })
         .once('end', function () {
@@ -119,17 +117,15 @@ module.exports = function (serverLog, logs, blobs, emitter) {
 
     function onAppend (index, entry) {
       // Do not send entries from earlier in the log than requested.
-      if (reading) {
-        if (reading.from <= index) {
-          // Phase 3:
-          if (reading.doneStreaming) {
-            serverLog.info({event: 'forward', index: index})
-            sendEntry(index, entry)
-          // Waiting for Phase 2
-          } else {
-            serverLog.info({event: 'buffer', index: index})
-            reading.buffer.push({index: index, entry: entry})
-          }
+      if (reading.from <= index) {
+        // Phase 3:
+        if (reading.doneStreaming) {
+          serverLog.info({event: 'forward', index: index})
+          sendEntry(index, entry)
+        // Waiting for Phase 2
+        } else {
+          serverLog.info({event: 'buffer', index: index})
+          reading.buffer.push({index: index, entry: entry})
         }
       }
     }
@@ -139,13 +135,14 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       var writeLog = serverLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({key: hashToPath(hash)})
-        .once('error', function (error) {
+        .once('error', /* istanbul ignore next */ function (error) {
           writeLog.error(error)
           json.write({id: message.id, error: error.toString()})
         })
         .once('finish', function () {
           // Append an entry in the LevelUP log with the hash of the payload.
           entriesQueue.push(hash, function (error, index) {
+            /* istanbul ignore if */
             if (error) {
               writeLog.error(error)
               json.write({id: message.id, error: error.toString()})
@@ -157,7 +154,8 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             }
           })
         })
-        .end(stringify(message.entry), 'utf8') }
+        .end(stringify(message.entry), 'utf8')
+    }
 
     function sendEntry (index, entry) {
       json.write({index: index, entry: entry})
