@@ -62,7 +62,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
 
     json.on('data', function (message) {
       serverLog.info({event: 'message', message: message})
-      if (readMessage(message) && !reading) onReadMessage(message)
+      if (readMessage(message)) onReadMessage(message)
       else if (writeMessage(message)) onWriteMessage(message)
       else {
         serverLog.warn({event: 'invalid', message: message})
@@ -71,6 +71,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     })
 
     function onReadMessage (message) {
+      if (reading) return disconnect('already reading')
       reading = {doneStreaming: false, buffer: [], from: message.from}
       emitter.addListener('entry', onAppend)
 
@@ -97,9 +98,10 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             })
         })
         .once('error', /* istanbul ignore next */ function (error) {
-          disconnect(error.toString())
+          if (reading) disconnect(error.toString())
         })
         .once('end', function () {
+          if (!reading) return
           streamLog.info({event: 'end'})
           // Phase 2: Entries may have been written while we were
           // streaming from LevelUP. Send them now.
@@ -158,6 +160,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     }
 
     function sendEntry (index, entry) {
+      if (!reading) return
       json.write({index: index, entry: entry})
       serverLog.info({event: 'sent', index: index})
     }
@@ -166,6 +169,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       serverLog.error({error: error})
       json.write({error: error})
       emitter.removeListener('entry', onAppend)
+      if (reading) reading.stream.destroy()
       reading = false
       connection.destroy()
     }

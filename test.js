@@ -14,6 +14,16 @@ simpleTest('confirms writes', {
   receive: [{event: 'wrote', id: 'abc123', index: 1}]
 })
 
+simpleTest('duplicate read', {
+  send: [
+    {type: 'read', from: 0},
+    {type: 'read', from: 0}
+  ],
+  receive: [
+    {error: 'already reading'}
+  ]
+})
+
 simpleTest('simple sync', {
   send: [
     {type: 'write', entry: {a: 1}, id: 'abc123'},
