@@ -75,7 +75,6 @@ module.exports = function (serverLog, logs, blobs, emitter) {
 
     function onReadMessage (message) {
       reading = {doneStreaming: false, buffer: [], from: message.from}
-
       emitter.addListener('entry', onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
@@ -122,20 +121,23 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           // than buffered.
           reading.buffer = null
           reading.doneStreaming = true
+          json.write({current: true})
         })
     }
 
     function onAppend (index, entry) {
       // Do not send entries from earlier in the log than requested.
-      if (reading.from <= index) {
-        // Phase 3:
-        if (reading.doneStreaming) {
-          serverLog.info({event: 'forward', index: index})
-          sendEntry(index, entry)
-        // Waiting for Phase 2
-        } else {
-          serverLog.info({event: 'buffer', index: index})
-          reading.buffer.push({index: index, entry: entry})
+      if (reading) {
+        if (reading.from <= index) {
+          // Phase 3:
+          if (reading.doneStreaming) {
+            serverLog.info({event: 'forward', index: index})
+            sendEntry(index, entry)
+          // Waiting for Phase 2
+          } else {
+            serverLog.info({event: 'buffer', index: index})
+            reading.buffer.push({index: index, entry: entry})
+          }
         }
       }
     }

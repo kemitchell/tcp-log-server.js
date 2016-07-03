@@ -13,19 +13,16 @@ tape('simple sync', function (test) {
   testConnections(1, function (client, server) {
     var writeUUID = uuid()
     var readUUID = uuid()
-    var messageCount = 0
+    var messages = []
+    var expected = [
+      {current: true},
+      {event: 'wrote', replyTo: writeUUID},
+      {index: 1, entry: {a: 1}}
+    ]
     client.on('data', function (data) {
-      messageCount++
-      if (messageCount === 1) {
-        test.deepEqual(
-          data,
-          {event: 'wrote', replyTo: writeUUID},
-          'first message confirms write')
-      } else if (messageCount === 2) {
-        test.deepEqual(
-          data,
-          {index: 1, entry: {a: 1}},
-          'second message reads entry')
+      messages.push(data)
+      if (messages.length === expected.length) {
+        test.deepEqual(messages, expected)
         client.end()
         server.close()
         test.end()
@@ -41,24 +38,18 @@ tape('writes before and after read', function (test) {
     var firstWriteUUID = uuid()
     var secondWriteUUID = uuid()
     var readUUID = uuid()
-    var messageCount = 0
-    var messages = [ ]
+    var messages = []
+    var expected = [
+      {current: true},
+      {event: 'wrote', replyTo: firstWriteUUID},
+      {index: 1, entry: {a: 1}},
+      {event: 'wrote', replyTo: secondWriteUUID},
+      {index: 2, entry: {b: 2}}
+    ]
     client.on('data', function (data) {
-      messageCount++
       messages.push(data)
-      if (messageCount === 4) {
-        test.assert(
-          messages.some(function (element) {
-            return deepEqual(element, {index: 1, entry: {a: 1}})
-          }),
-          'reads first entry'
-        )
-        test.assert(
-          messages.some(function (element) {
-            return deepEqual(element, {index: 2, entry: {b: 2}})
-          }),
-          'reads second entry'
-        )
+      if (messages.length === expected.length) {
+        test.deepEqual(messages, expected)
         client.end()
         server.close()
         test.end()
@@ -140,6 +131,40 @@ tape('read from future index', function (test) {
     client.write({type: 'read', from: 2, id: uuid()})
     client.write({type: 'write', entry: entries[0], id: uuid()})
     client.write({type: 'write', entry: entries[1], id: uuid()})
+  })
+})
+
+tape('current signal', function (test) {
+  testConnections(1, function (client, server) {
+    var entries = [{a: 1}, {b: 2}, {c: 3}]
+    var uuids = [uuid(), uuid(), uuid()]
+    var messages = []
+    var expected = [
+      {event: 'wrote', replyTo: uuids[0]},
+      {event: 'wrote', replyTo: uuids[1]},
+      {index: 1, entry: entries[0]},
+      {index: 2, entry: entries[1]},
+      {current: true},
+      {event: 'wrote', replyTo: uuids[2]},
+      {index: 3, entry: entries[2]}
+    ]
+    client.on('data', function (data) {
+      messages.push(data)
+      if (messages.length === expected.length) {
+        test.deepEqual(messages, expected)
+        client.end()
+        server.close()
+        test.end()
+      }
+    })
+    client.write({type: 'write', entry: entries[0], id: uuids[0]})
+    client.write({type: 'write', entry: entries[1], id: uuids[1]})
+    setTimeout(function () {
+      client.write({type: 'read', from: 0, id: uuid()})
+      setTimeout(function () {
+        client.write({type: 'write', entry: entries[2], id: uuids[2]})
+      }, 50)
+    }, 50)
   })
 })
 
