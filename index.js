@@ -23,12 +23,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
 
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
-      .on('error', function () {
-        serverLog.error({event: 'invalid JSON'})
-        reading = false
-        emitter.removeListener('entry', onAppend)
-        connection.destroy()
-      })
+      .on('error', function () { disconnect('invalid JSON') })
 
     // An object recording information about the state of reading from
     // the log.
@@ -104,17 +99,14 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             })
         })
         .once('error', function (error) {
-          streamLog.error(error)
-          sendEntry(-1, {error: error.toString()}, true)
-          emitter.removeListener('entry', onAppend)
-          reading = false
+          disconnect(error.toString())
         })
         .once('end', function () {
           streamLog.info({event: 'end'})
           // Phase 2: Entries may have been written while we were
           // streaming from LevelUP. Send them now.
           reading.buffer.forEach(function (message) {
-            sendEntry(message.index, message.key, message.entry)
+            sendEntry(message.index, message.entry)
           })
           // Mark the stream done so messages sent via the
           // EventEmitter will be written out to the socket, rather
@@ -167,9 +159,17 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         })
         .end(stringify(message.entry), 'utf8') }
 
-    function sendEntry (index, entry, end) {
-      json[end ? 'end' : 'write']({index: index, entry: entry})
+    function sendEntry (index, entry) {
+      json.write({index: index, entry: entry})
       serverLog.info({event: 'sent', index: index})
+    }
+
+    function disconnect (error) {
+      serverLog.error({error: error})
+      json.write({error: error})
+      emitter.removeListener('entry', onAppend)
+      reading = false
+      connection.destroy()
     }
   }
 }
