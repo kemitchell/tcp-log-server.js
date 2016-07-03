@@ -16,7 +16,7 @@ tape('simple sync', function (test) {
     var messages = []
     var expected = [
       {current: true},
-      {event: 'wrote', replyTo: writeUUID},
+      {event: 'wrote', id: writeUUID},
       {index: 1, entry: {a: 1}}
     ]
     client.on('data', function (data) {
@@ -41,9 +41,9 @@ tape('writes before and after read', function (test) {
     var messages = []
     var expected = [
       {current: true},
-      {event: 'wrote', replyTo: firstWriteUUID},
+      {event: 'wrote', id: firstWriteUUID},
       {index: 1, entry: {a: 1}},
-      {event: 'wrote', replyTo: secondWriteUUID},
+      {event: 'wrote', id: secondWriteUUID},
       {index: 2, entry: {b: 2}}
     ]
     client.on('data', function (data) {
@@ -140,12 +140,12 @@ tape('current signal', function (test) {
     var uuids = [uuid(), uuid(), uuid()]
     var messages = []
     var expected = [
-      {event: 'wrote', replyTo: uuids[0]},
-      {event: 'wrote', replyTo: uuids[1]},
+      {event: 'wrote', id: uuids[0]},
+      {event: 'wrote', id: uuids[1]},
       {index: 1, entry: entries[0]},
       {index: 2, entry: entries[1]},
       {current: true},
-      {event: 'wrote', replyTo: uuids[2]},
+      {event: 'wrote', id: uuids[2]},
       {index: 3, entry: entries[2]}
     ]
     client.on('data', function (data) {

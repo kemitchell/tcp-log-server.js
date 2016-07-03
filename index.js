@@ -141,17 +141,17 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       blobs.createWriteStream({key: hashToPath(hash)})
         .once('error', function (error) {
           writeLog.error(error)
-          json.write({replyTo: message.id, error: error.toString()})
+          json.write({id: message.id, error: error.toString()})
         })
         .once('finish', function () {
           // Append an entry in the LevelUP log with the hash of the payload.
           entriesQueue.push(hash, function (error, index) {
             if (error) {
               writeLog.error(error)
-              json.write({replyTo: message.id, error: error.toString()})
+              json.write({id: message.id, error: error.toString()})
             } else {
               writeLog.info({event: 'wrote'})
-              json.write({replyTo: message.id, event: 'wrote'})
+              json.write({id: message.id, event: 'wrote'})
               // Emit an event.
               emitter.emit('entry', index, message.entry)
             }
