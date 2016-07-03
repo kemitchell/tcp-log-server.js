@@ -115,18 +115,18 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         })
     }
 
-    function onAppend (index, entry) {
+    function onAppend (index, entry, fromConnection) {
+      if (fromConnection === connection) return
+      if (reading.from > index) return
       // Do not send entries from earlier in the log than requested.
-      if (reading.from <= index) {
-        // Phase 3:
-        if (reading.doneStreaming) {
-          serverLog.info({event: 'forward', index: index})
-          sendEntry(index, entry)
-        // Waiting for Phase 2
-        } else {
-          serverLog.info({event: 'buffer', index: index})
-          reading.buffer.push({index: index, entry: entry})
-        }
+      // Phase 3:
+      if (reading.doneStreaming) {
+        serverLog.info({event: 'forward', index: index})
+        sendEntry(index, entry)
+      // Waiting for Phase 2
+      } else {
+        serverLog.info({event: 'buffer', index: index})
+        reading.buffer.push({index: index, entry: entry})
       }
     }
 
@@ -148,9 +148,9 @@ module.exports = function (serverLog, logs, blobs, emitter) {
               json.write({id: message.id, error: error.toString()})
             } else {
               writeLog.info({event: 'wrote'})
-              json.write({id: message.id, event: 'wrote'})
+              json.write({id: message.id, event: 'wrote', index: index})
               // Emit an event.
-              emitter.emit('entry', index, message.entry)
+              emitter.emit('entry', index, message.entry, connection)
             }
           })
         })

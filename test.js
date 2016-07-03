@@ -9,6 +9,11 @@ var pino = require('pino')
 var tape = require('tape')
 var uuid = require('uuid').v4
 
+simpleTest('confirms writes', {
+  send: [{type: 'write', entry: {a: 1}, id: 'abc123'}],
+  receive: [{event: 'wrote', id: 'abc123', index: 1}]
+})
+
 simpleTest('simple sync', {
   send: [
     {type: 'write', entry: {a: 1}, id: 'abc123'},
@@ -16,8 +21,7 @@ simpleTest('simple sync', {
   ],
   receive: [
     {current: true},
-    {event: 'wrote', id: 'abc123'},
-    {index: 1, entry: {a: 1}}
+    {event: 'wrote', id: 'abc123', index: 1}
   ]
 })
 
@@ -29,10 +33,8 @@ tape('writes before and after read', function (test) {
     var messages = []
     var expected = [
       {current: true},
-      {event: 'wrote', id: firstWriteUUID},
-      {index: 1, entry: {a: 1}},
-      {event: 'wrote', id: secondWriteUUID},
-      {index: 2, entry: {b: 2}}
+      {event: 'wrote', id: firstWriteUUID, index: 1},
+      {event: 'wrote', id: secondWriteUUID, index: 2}
     ]
     client.on('data', function (data) {
       messages.push(data)
@@ -57,10 +59,8 @@ simpleTest('writes before and after read', {
   ],
   receive: [
     {current: true},
-    {event: 'wrote', id: 'first write'},
-    {index: 1, entry: {a: 1}},
-    {event: 'wrote', id: 'second write'},
-    {index: 2, entry: {b: 2}}
+    {event: 'wrote', id: 'first write', index: 1},
+    {event: 'wrote', id: 'second write', index: 2}
   ]
 })
 
@@ -114,59 +114,63 @@ tape('old entry', function (test) {
       }
     })
     client.write({type: 'write', entry: entry, id: uuid()})
-    client.write({type: 'read', from: 0, id: uuid()})
+    setTimeout(function () {
+      client.write({type: 'read', from: 0, id: uuid()})
+    }, 25)
   })
 })
 
 tape('read from future index', function (test) {
-  testConnections(1, function (client, server) {
+  testConnections(2, function (clients, server) {
+    var readingClient = clients[0]
+    var writingClient = clients[1]
     var entries = [{a: 1}, {b: 2}]
-    client.on('data', function (data) {
+    readingClient.on('data', function (data) {
       /* istanbul ignore if */
       if (deepEqual(data.entry, entries[0])) {
         test.fail('received earlier entry')
       } else if (deepEqual(data.entry, entries[1])) {
         test.pass('receives newer entry')
-        client.end()
+        readingClient.end()
         server.close()
         test.end()
       }
     })
-    client.write({type: 'read', from: 2, id: uuid()})
-    client.write({type: 'write', entry: entries[0], id: uuid()})
-    client.write({type: 'write', entry: entries[1], id: uuid()})
+    readingClient.write({type: 'read', from: 2, id: uuid()})
+    writingClient.write({type: 'write', entry: entries[0], id: uuid()})
+    writingClient.write({type: 'write', entry: entries[1], id: uuid()})
+    writingClient.end()
   })
 })
 
 tape('current signal', function (test) {
-  testConnections(1, function (client, server) {
+  testConnections(2, function (clients, server) {
+    var readingClient = clients[0]
+    var writingClient = clients[1]
     var entries = [{a: 1}, {b: 2}, {c: 3}]
     var uuids = [uuid(), uuid(), uuid()]
     var messages = []
     var expected = [
-      {event: 'wrote', id: uuids[0]},
-      {event: 'wrote', id: uuids[1]},
       {index: 1, entry: entries[0]},
       {index: 2, entry: entries[1]},
       {current: true},
-      {event: 'wrote', id: uuids[2]},
       {index: 3, entry: entries[2]}
     ]
-    client.on('data', function (data) {
+    readingClient.on('data', function (data) {
       messages.push(data)
       if (messages.length === expected.length) {
         test.deepEqual(messages, expected)
-        client.end()
+        readingClient.end()
         server.close()
         test.end()
       }
     })
-    client.write({type: 'write', entry: entries[0], id: uuids[0]})
-    client.write({type: 'write', entry: entries[1], id: uuids[1]})
+    writingClient.write({type: 'write', entry: entries[0], id: uuids[0]})
+    writingClient.write({type: 'write', entry: entries[1], id: uuids[1]})
     setTimeout(function () {
-      client.write({type: 'read', from: 0, id: uuid()})
+      readingClient.write({type: 'read', from: 0, id: uuid()})
       setTimeout(function () {
-        client.write({type: 'write', entry: entries[2], id: uuids[2]})
+        writingClient.end({type: 'write', entry: entries[2], id: uuids[2]})
       }, 50)
     }, 50)
   })
@@ -204,10 +208,14 @@ function simpleTest (name, options) {
       client.on('data', function (data) {
         received.push(data)
         if (received.length === expected.length) {
-          test.deepEqual(received, expected)
-          client.end()
-          server.close()
-          test.end()
+          setTimeout(function () {
+            test.deepEqual(received, expected)
+            client.end()
+            server.close()
+            test.end()
+          }, 100)
+        } else if (received.length > expected.length) {
+          test.fail('too many messages received')
         }
       })
       options.send.forEach(function (message) {
