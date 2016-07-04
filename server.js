@@ -13,12 +13,16 @@ var handler = require('./')(
   new (require('events').EventEmitter)()
 )
 
+var sockets = require('stream-set')()
 var server = require('net').createServer()
+.on('connection', function (socket) { sockets.add(socket) })
 .on('connection', handler)
-.once('close', function () { level.close() })
 
 server.listen(PORT, function () {
   pino.info({event: 'listening', port: this.address().port})
 })
 
-process.on('exit', function () { server.close() })
+process.on('exit', function () {
+  sockets.forEach(function (socket) { socket.destroy() })
+  server.close()
+})
