@@ -196,12 +196,12 @@ tape('invalid message', function (test) {
 tape('invalid json', function (test) {
   testConnections(0, function (_, server, port) {
     var client = net.connect({port: port})
-      .on('connect', function () { client.write('not JSON\n') })
-      .on('close', function () {
-        test.pass('connection closed by server')
-        server.close()
-        test.end()
-      })
+    .on('connect', function () { client.write('not JSON\n') })
+    .on('close', function () {
+      test.pass('connection closed by server')
+      server.close()
+      test.end()
+    })
   })
 })
 
@@ -242,17 +242,17 @@ function testConnections (numberOfClients, callback) {
   var emitter = new (require('events').EventEmitter)()
   var handler = require('./')(log, logs, blobs, emitter)
   var server = net.createServer()
-    .on('connection', handler)
-    .once('close', function () { level.close() })
-    .listen(0, function () {
-      var serverPort = this.address().port
-      var clients = []
-      for (var n = 0; n < numberOfClients; n++) {
-        var client = net.connect(serverPort)
-        var clientJSON = duplexJSON(client)
-        clients.push(clientJSON)
-      }
-      if (numberOfClients === 1) callback(clients[0], server, serverPort)
-      else callback(clients, server, serverPort)
-    })
+  .on('connection', handler)
+  .once('close', function () { level.close() })
+  .listen(0, function () {
+    var serverPort = this.address().port
+    var clients = []
+    for (var n = 0; n < numberOfClients; n++) {
+      var client = net.connect(serverPort)
+      var clientJSON = duplexJSON(client)
+      clients.push(clientJSON)
+    }
+    if (numberOfClients === 1) callback(clients[0], server, serverPort)
+    else callback(clients, server, serverPort)
+  })
 }

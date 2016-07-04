@@ -16,16 +16,16 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     })
 
     connection
-      .once('end', function () { serverLog.info({event: 'end'}) })
-      .once('close', function (error) {
-        serverLog.info({event: 'end', error: error})
-      })
+    .once('end', function () { serverLog.info({event: 'end'}) })
+    .once('close', function (error) {
+      serverLog.info({event: 'end', error: error})
+    })
 
     // Send JSON back and forth across the connection.
     var json = duplexJSON(connection)
-      .once('error', /* istanbul ignore next */ function () {
-        disconnect('invalid JSON')
-      })
+    .once('error', /* istanbul ignore next */ function () {
+      disconnect('invalid JSON')
+    })
 
     // An object recording information about the state of reading from
     // the log.
@@ -82,39 +82,39 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       var stream = logs.createReadStream(LOG_NAME, streamOptions)
       reading.stream = stream
       stream
-        .on('data', function (data) {
-          var chunks = []
-          // Use the hash from LevelUP to look up the message data in
-          // the blob store.
-          blobs.createReadStream({key: hashToPath(data.value)})
-            .on('data', function (chunk) { chunks.push(chunk) })
-            .once('error', /* istanbul ignore next */ function (error) {
-              serverLog.error(error)
-              json.write({blob: data.value, error: error.toString()})
-            })
-            .once('end', function () {
-              var value = JSON.parse(Buffer.concat(chunks))
-              sendEntry(data.seq, value)
-            })
-        })
+      .on('data', function (data) {
+        var chunks = []
+        // Use the hash from LevelUP to look up the message data in
+        // the blob store.
+        blobs.createReadStream({key: hashToPath(data.value)})
+        .on('data', function (chunk) { chunks.push(chunk) })
         .once('error', /* istanbul ignore next */ function (error) {
-          if (reading) disconnect(error.toString())
+          serverLog.error(error)
+          json.write({blob: data.value, error: error.toString()})
         })
         .once('end', function () {
-          if (!reading) return
-          streamLog.info({event: 'end'})
-          // Phase 2: Entries may have been written while we were
-          // streaming from LevelUP. Send them now.
-          reading.buffer.forEach(function (message) {
-            sendEntry(message.index, message.entry)
-          })
-          // Mark the stream done so messages sent via the
-          // EventEmitter will be written out to the socket, rather
-          // than buffered.
-          reading.buffer = null
-          reading.doneStreaming = true
-          json.write({current: true})
+          var value = JSON.parse(Buffer.concat(chunks))
+          sendEntry(data.seq, value)
         })
+      })
+      .once('error', /* istanbul ignore next */ function (error) {
+        if (reading) disconnect(error.toString())
+      })
+      .once('end', function () {
+        if (!reading) return
+        streamLog.info({event: 'end'})
+        // Phase 2: Entries may have been written while we were
+        // streaming from LevelUP. Send them now.
+        reading.buffer.forEach(function (message) {
+          sendEntry(message.index, message.entry)
+        })
+        // Mark the stream done so messages sent via the
+        // EventEmitter will be written out to the socket, rather
+        // than buffered.
+        reading.buffer = null
+        reading.doneStreaming = true
+        json.write({current: true})
+      })
     }
 
     function onAppend (index, entry, fromConnection) {
@@ -137,26 +137,26 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       var writeLog = serverLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({key: hashToPath(hash)})
-        .once('error', /* istanbul ignore next */ function (error) {
-          writeLog.error(error)
-          json.write({id: message.id, error: error.toString()})
+      .once('error', /* istanbul ignore next */ function (error) {
+        writeLog.error(error)
+        json.write({id: message.id, error: error.toString()})
+      })
+      .once('finish', function () {
+        // Append an entry in the LevelUP log with the hash of the payload.
+        entriesQueue.push(hash, function (error, index) {
+          /* istanbul ignore if */
+          if (error) {
+            writeLog.error(error)
+            json.write({id: message.id, error: error.toString()})
+          } else {
+            writeLog.info({event: 'wrote'})
+            json.write({id: message.id, event: 'wrote', index: index})
+            // Emit an event.
+            emitter.emit('entry', index, message.entry, connection)
+          }
         })
-        .once('finish', function () {
-          // Append an entry in the LevelUP log with the hash of the payload.
-          entriesQueue.push(hash, function (error, index) {
-            /* istanbul ignore if */
-            if (error) {
-              writeLog.error(error)
-              json.write({id: message.id, error: error.toString()})
-            } else {
-              writeLog.info({event: 'wrote'})
-              json.write({id: message.id, event: 'wrote', index: index})
-              // Emit an event.
-              emitter.emit('entry', index, message.entry, connection)
-            }
-          })
-        })
-        .end(stringify(message.entry), 'utf8')
+      })
+      .end(stringify(message.entry), 'utf8')
     }
 
     function sendEntry (index, entry) {

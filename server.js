@@ -14,8 +14,8 @@ var handler = require('./')(
 )
 
 var server = require('net').createServer()
-  .on('connection', handler)
-  .once('close', function () { level.close() })
+.on('connection', handler)
+.once('close', function () { level.close() })
 
 server.listen(PORT, function () {
   pino.info({event: 'listening', port: this.address().port})
