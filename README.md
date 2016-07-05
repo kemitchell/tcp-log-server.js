@@ -45,6 +45,14 @@ or in whatever combination you like.
 
 [LevelDOWN]: https://www.npmjs.com/package/abstract-leveldown
 
+There is one caveat: The storage back-end for the LevelUP must support
+[snapshots].  [level-party] and a few other helper packages prevent
+snapshotting.
+
+[snapshots]: https://github.com/level/leveldown#snapshots
+
+[level-party]: https://www.npmjs.com/package/level-party
+
 ## Protocol
 
 The server accepts TCP connections.  It enables keep-alive on each
