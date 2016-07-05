@@ -10,7 +10,7 @@ var tape = require('tape')
 
 simpleTest('confirms writes', {
   send: [{type: 'write', entry: {a: 1}, id: 'abc123'}],
-  receive: [{event: 'wrote', id: 'abc123', index: 1}]
+  receive: [{id: 'abc123', index: 1}]
 })
 
 simpleTest('duplicate read', {
@@ -30,7 +30,7 @@ simpleTest('simple sync', {
   ],
   receive: [
     {current: true},
-    {event: 'wrote', id: 'abc123', index: 1}
+    {id: 'abc123', index: 1}
   ]
 })
 
@@ -39,8 +39,8 @@ tape('writes before and after read', function (test) {
     var messages = []
     var expected = [
       {current: true},
-      {event: 'wrote', id: 'first', index: 1},
-      {event: 'wrote', id: 'second', index: 2}
+      {id: 'first', index: 1},
+      {id: 'second', index: 2}
     ]
     client.on('data', function (data) {
       messages.push(data)
@@ -65,8 +65,8 @@ simpleTest('writes before and after read', {
   ],
   receive: [
     {current: true},
-    {event: 'wrote', id: 'first write', index: 1},
-    {event: 'wrote', id: 'second write', index: 2}
+    {id: 'first write', index: 1},
+    {id: 'second write', index: 2}
   ]
 })
 

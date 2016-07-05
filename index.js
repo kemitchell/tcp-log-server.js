@@ -89,7 +89,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           } else {
             writeLog.info({event: 'wrote'})
             // Send confirmation.
-            var confirmation = {id: message.id, event: 'wrote', index: index}
+            var confirmation = {id: message.id, index: index}
             json.write(confirmation, done)
             // Emit an event.
             emitter.emit('entry', index, message.entry, connection)

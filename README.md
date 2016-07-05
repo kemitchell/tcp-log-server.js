@@ -86,7 +86,7 @@ Once successfully appended to the log, the server will confirm the
 index of the newly appended entry.
 
 ```json
-{"id":"some-id","event":"wrote","index":44}
+{"id":"some-id","index":44}
 ```
 
 The server will _not_ echo the new entry back to the client that
