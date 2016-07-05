@@ -14,14 +14,14 @@ simpleTest('confirms writes', {
 })
 
 simpleTest('duplicate read', {
-  send: [{from: 0}, {from: 0}],
+  send: [{from: 1}, {from: 1}],
   receive: [{error: 'already reading'}]
 })
 
 simpleTest('simple sync', {
   send: [
     {entry: {a: 1}, id: 'abc123'},
-    {from: 0}
+    {from: 1}
   ],
   receive: [
     {current: true},
@@ -47,7 +47,7 @@ tape('writes before and after read', function (test) {
       }
     })
     client.write({entry: {a: 1}, id: 'first'})
-    client.write({from: 0})
+    client.write({from: 1})
     client.write({entry: {b: 2}, id: 'second'})
   })
 })
@@ -55,7 +55,7 @@ tape('writes before and after read', function (test) {
 simpleTest('writes before and after read', {
   send: [
     {entry: {a: 1}, id: 'first write'},
-    {from: 0},
+    {from: 1},
     {entry: {b: 2}, id: 'second write'}
   ],
   receive: [
@@ -96,8 +96,8 @@ tape('two clients', function (test) {
         finish()
       }
     })
-    ana.write({from: 0})
-    bob.write({from: 0})
+    ana.write({from: 1})
+    bob.write({from: 1})
     ana.write({entry: anaWasHere, id: 'first'})
     bob.write({entry: bobWasHere, id: 'second'})
   })
@@ -116,7 +116,7 @@ tape('old entry', function (test) {
     })
     client.write({entry: entry, id: 'first'})
     setTimeout(function () {
-      client.write({from: 0})
+      client.write({from: 1})
     }, 25)
   })
 })
@@ -140,6 +140,31 @@ tape('read from future index', function (test) {
     readingClient.write({from: 2})
     writingClient.write({entry: entries[0], id: 'first'})
     writingClient.write({entry: entries[1], id: 'second'})
+    writingClient.end()
+  })
+})
+
+tape('read from later', function (test) {
+  testConnections(2, function (clients, server) {
+    var readingClient = clients[0]
+    var writingClient = clients[1]
+    var entries = [{a: 1}, {b: 2}, {c: 3}]
+    var received = []
+    readingClient.on('data', function (data) {
+      if ('entry' in data) received.push(data.entry)
+      if (received.length === 2) {
+        test.deepEqual(
+          received, entries.slice(1),
+          'received last two')
+        readingClient.end()
+        server.close()
+        test.end()
+      }
+    })
+    readingClient.write({from: 2})
+    entries.forEach(function (entry, index) {
+      writingClient.write({entry: entry, id: '' + index})
+    })
     writingClient.end()
   })
 })
@@ -168,7 +193,7 @@ tape('current signal', function (test) {
     writingClient.write({entry: entries[0], id: 'first'})
     writingClient.write({entry: entries[1], id: 'second'})
     setTimeout(function () {
-      readingClient.write({from: 0})
+      readingClient.write({from: 1})
       setTimeout(function () {
         writingClient.end({entry: entries[2], id: 'third'})
       }, 50)

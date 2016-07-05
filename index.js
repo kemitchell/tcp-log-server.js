@@ -139,7 +139,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       // Phase 1: Stream index-hash pairs from the LevelUP store.
       var streamLog = serverLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
-      var streamOptions = {since: message.from}
+      var streamOptions = {since: message.from - 1}
       var stream = logs.createReadStream(LOG_NAME, streamOptions)
       reading.stream = stream
       stream
@@ -237,11 +237,7 @@ function has (argument, key, predicate) {
 }
 
 function isPositiveInteger (argument) {
-  return (
-    typeof argument === 'number' &&
-    argument % 1 === 0 &&
-    argument >= 0
-  )
+  return Number.isInteger(argument) && argument > 0
 }
 
 function hashToPath (hash) {

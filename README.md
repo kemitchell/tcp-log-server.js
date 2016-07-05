@@ -60,11 +60,12 @@ Clients can send:
 ### Read
 
 ```json
-{"from":0}
+{"from":1}
 ```
 
 On receipt, the server will begin sending log entries with indices
-greater than or equal to `from`.  Each entry will be sent like:
+greater than or equal to `from`.  (The first index is `1`.)  Each entry
+will be sent like:
 
 ```json
 {"index":"1","entry":{"some":"entry"}}
