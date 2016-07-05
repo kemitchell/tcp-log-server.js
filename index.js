@@ -9,8 +9,11 @@ var LOG_NAME = 'log'
 
 module.exports = function (serverLog, logs, blobs, emitter) {
   return function (connection) {
+    // Conncetions will be held open long-term, and may site idle.  Enable
+    // keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
 
+    // Sert up a child log for just this connection, identified by UUID.
     serverLog = serverLog.child({connection: uuid.v4()})
     serverLog.info({
       event: 'connected',
@@ -18,37 +21,42 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       port: connection.removePort
     })
 
+    // Log end-of-connection events.
     connection
     .once('end', function () { serverLog.info({event: 'end'}) })
     .once('close', function (error) {
-      serverLog.info({event: 'end', error: error})
+      serverLog.info({event: 'close', error: error})
     })
 
-    // Send JSON back and forth across the connection.
+    // Send newline-delimited JSON back and forth across the connection.
     var json = duplexJSON(connection)
-    .once('error', /* istanbul ignore next */ function () {
-      disconnect('invalid JSON')
-    })
+    .once('error', function () { disconnect('invalid JSON') })
 
     // An object recording information about the state of reading from
     // the log.
     //
-    // - doneStreaming (boolean): The server is done streaming old entries.
+    // - doneStreaming (boolean): The server is done streaming old
+    //   entries.
     //
     // - buffer (array): Contains entries made after the server
     //   started streaming old entries, but before it finished.
     //
     // - stream (stream): The stream of log entries, or null when
     //   doneStreaming is true.
+    //
+    // - from (Number): The index of the first entry to send.
+    //
+    // - queue (async.queue): Queue of entries to send.
     var reading = false
 
     // A read advances, in order, through three phases:
     //
-    // Phase 1. Streaming entries from the LevelUP store, fetching
-    //          their content from the blob store.
+    // Phase 1. Streaming entries from a snapshot of the LevelUP store
+    //          created by `.createReadStream`, fetching their content
+    //          from the blob store.
     //
-    // Phase 2. Sending buffered entries that were written while the
-    //          read was streaming.
+    // Phase 2. Sending entries that were buffered while completing
+    //          Phase 1.
     //
     // Phase 3. Sending entries as they are written.
     //
@@ -59,7 +67,10 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     // append operation can read the head of the log and number itself
     // appropriately.
     var writeQueue = asyncQueue(function (message, done) {
-      var hash = sha256(stringify(message.entry))
+      // Compute the hash of the entry's content.
+      var content = stringify(message.entry)
+      var hash = sha256(content)
+      // Create a child log for this entry write.
       var writeLog = serverLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({key: hashToPath(hash)})
@@ -68,8 +79,8 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         json.write({id: message.id, error: error.toString()}, done)
       })
       .once('finish', function () {
-        // Append an entry in the LevelUP log with the hash of the payload.
-        serverLog.info({event: 'appending', hash: hash})
+        // Append an entry to the log with the hash of the entry.
+        writeLog.info({event: 'appending', hash: hash})
         logs.append(LOG_NAME, hash, function (error, index) {
           /* istanbul ignore if */
           if (error) {
@@ -77,6 +88,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             json.write({id: message.id, error: error.toString()}, done)
           } else {
             writeLog.info({event: 'wrote'})
+            // Send confirmation.
             var confirmation = {id: message.id, event: 'wrote', index: index}
             json.write(confirmation, done)
             // Emit an event.
@@ -84,9 +96,10 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           }
         })
       })
-      .end(stringify(message.entry), 'utf8')
+      .end(content)
     })
 
+    // Route client messages to appropriate handlers.
     json.on('data', function (message) {
       serverLog.info({event: 'message', message: message})
       if (readMessage(message)) onReadMessage(message)
@@ -97,6 +110,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       }
     })
 
+    // Handle read requests.
     function onReadMessage (message) {
       if (reading) return disconnect('already reading')
       reading = {
@@ -118,6 +132,8 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           })
         })
       }
+
+      // Start buffering new entries appended while sending old entries.
       emitter.addListener('entry', onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
@@ -147,6 +163,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             // than buffered.
             reading.buffer = null
             reading.doneStreaming = true
+            // Send up-to-date message.
             json.write({current: true})
           }
         )
@@ -154,9 +171,11 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     }
 
     function onAppend (index, entry, fromConnection) {
+      // Do not echo data that clients append back to them. They will
+      // receive append confirmations with new entry index.
       if (fromConnection === connection) return
-      if (reading.from > index) return
       // Do not send entries from earlier in the log than requested.
+      if (reading.from > index) return
       // Phase 3:
       if (reading.doneStreaming) {
         serverLog.info({event: 'forward', index: index})
