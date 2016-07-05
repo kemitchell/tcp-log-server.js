@@ -9,6 +9,8 @@ var LOG_NAME = 'log'
 
 module.exports = function (serverLog, logs, blobs, emitter) {
   return function (connection) {
+    connection.setKeepAlive(true)
+
     serverLog = serverLog.child({connection: uuid.v4()})
     serverLog.info({
       event: 'connected',
