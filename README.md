@@ -1,5 +1,9 @@
 Serve an append-only log over TCP.
 
+- Uses a dead-simple, JSON-based protocol.
+- Stores entries as content-addressed blobs.
+- Persists to disk by default.
+
 ```bash
 npm install --global tcp-log-server
 tcp-log-server
