@@ -3,6 +3,7 @@
   "description": "serve an append-only log over TCP",
   "version": "2.0.0",
   "author": "Kyle E. Mitchell <kyle@kemitchell.com> (https://kemitchell.com/)",
+  "bin": "./server.js",
   "dependencies": {
     "async.queue": "^0.5.2",
     "duplex-json-stream": "^1.0.1",
