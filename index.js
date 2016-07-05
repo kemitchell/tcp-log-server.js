@@ -1,5 +1,6 @@
+var asyncEachSeries = require('async.eachseries')
+var asyncQueue = require('async.queue')
 var duplexJSON = require('duplex-json-stream')
-var queue = require('async.queue')
 var sha256 = require('sha256')
 var stringify = require('json-stable-stringify')
 var uuid = require('uuid')
@@ -52,18 +53,42 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
     // relevant places below.
 
-    // An asynchronous queue for appending hashes to the log. Ensures
-    // that each append operation can read the head of the log and
-    // number itself appropriately.
-    var entriesQueue = queue(function (hash, done) {
-      serverLog.info({event: 'appending', hash: hash})
-      logs.append(LOG_NAME, hash, done)
+    // An asynchronous queue for appending to the log. Ensures that each
+    // append operation can read the head of the log and number itself
+    // appropriately.
+    var writeQueue = asyncQueue(function (message, done) {
+      var hash = sha256(stringify(message.entry))
+      var writeLog = serverLog.child({hash: hash})
+      // Append the entry payload in the blob store, by hash.
+      blobs.createWriteStream({key: hashToPath(hash)})
+      .once('error', /* istanbul ignore next */ function (error) {
+        writeLog.error(error)
+        json.write({id: message.id, error: error.toString()}, done)
+      })
+      .once('finish', function () {
+        // Append an entry in the LevelUP log with the hash of the payload.
+        serverLog.info({event: 'appending', hash: hash})
+        logs.append(LOG_NAME, hash, function (error, index) {
+          /* istanbul ignore if */
+          if (error) {
+            writeLog.error(error)
+            json.write({id: message.id, error: error.toString()}, done)
+          } else {
+            writeLog.info({event: 'wrote'})
+            var confirmation = {id: message.id, event: 'wrote', index: index}
+            json.write(confirmation, done)
+            // Emit an event.
+            emitter.emit('entry', index, message.entry, connection)
+          }
+        })
+      })
+      .end(stringify(message.entry), 'utf8')
     })
 
     json.on('data', function (message) {
       serverLog.info({event: 'message', message: message})
       if (readMessage(message)) onReadMessage(message)
-      else if (writeMessage(message)) onWriteMessage(message)
+      else if (writeMessage(message)) writeQueue.push(message)
       else {
         serverLog.warn({event: 'invalid', message: message})
         json.write({error: 'invalid message'})
@@ -72,7 +97,25 @@ module.exports = function (serverLog, logs, blobs, emitter) {
 
     function onReadMessage (message) {
       if (reading) return disconnect('already reading')
-      reading = {doneStreaming: false, buffer: [], from: message.from}
+      reading = {
+        doneStreaming: false,
+        buffer: [],
+        from: message.from,
+        queue: asyncQueue(function (task, done) {
+          var chunks = []
+          // Use the hash from LevelUP to look up the message data in
+          // the blob store.
+          blobs.createReadStream({key: hashToPath(task.value)})
+          .on('data', function (chunk) { chunks.push(chunk) })
+          .once('error', /* istanbul ignore next */ function (error) {
+            serverLog.error(error)
+            json.write({blob: task.value, error: error.toString()})
+          })
+          .once('end', function () {
+            sendEntry(task.seq, JSON.parse(Buffer.concat(chunks)), done)
+          })
+        })
+      }
       emitter.addListener('entry', onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
@@ -82,21 +125,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       var stream = logs.createReadStream(LOG_NAME, streamOptions)
       reading.stream = stream
       stream
-      .on('data', function (data) {
-        var chunks = []
-        // Use the hash from LevelUP to look up the message data in
-        // the blob store.
-        blobs.createReadStream({key: hashToPath(data.value)})
-        .on('data', function (chunk) { chunks.push(chunk) })
-        .once('error', /* istanbul ignore next */ function (error) {
-          serverLog.error(error)
-          json.write({blob: data.value, error: error.toString()})
-        })
-        .once('end', function () {
-          var value = JSON.parse(Buffer.concat(chunks))
-          sendEntry(data.seq, value)
-        })
-      })
+      .on('data', function (data) { reading.queue.push(data) })
       .once('error', /* istanbul ignore next */ function (error) {
         if (reading) disconnect(error.toString())
       })
@@ -105,15 +134,20 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         streamLog.info({event: 'end'})
         // Phase 2: Entries may have been written while we were
         // streaming from LevelUP. Send them now.
-        reading.buffer.forEach(function (message) {
-          sendEntry(message.index, message.entry)
-        })
-        // Mark the stream done so messages sent via the
-        // EventEmitter will be written out to the socket, rather
-        // than buffered.
-        reading.buffer = null
-        reading.doneStreaming = true
-        json.write({current: true})
+        asyncEachSeries(
+          reading.buffer,
+          function (message, iterator, done) {
+            sendEntry(message.index, message.entry, done)
+          },
+          function () {
+            // Mark the stream done so messages sent via the
+            // EventEmitter will be written out to the socket, rather
+            // than buffered.
+            reading.buffer = null
+            reading.doneStreaming = true
+            json.write({current: true})
+          }
+        )
       })
     }
 
@@ -132,36 +166,9 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       }
     }
 
-    function onWriteMessage (message) {
-      var hash = sha256(stringify(message.entry))
-      var writeLog = serverLog.child({hash: hash})
-      // Append the entry payload in the blob store, by hash.
-      blobs.createWriteStream({key: hashToPath(hash)})
-      .once('error', /* istanbul ignore next */ function (error) {
-        writeLog.error(error)
-        json.write({id: message.id, error: error.toString()})
-      })
-      .once('finish', function () {
-        // Append an entry in the LevelUP log with the hash of the payload.
-        entriesQueue.push(hash, function (error, index) {
-          /* istanbul ignore if */
-          if (error) {
-            writeLog.error(error)
-            json.write({id: message.id, error: error.toString()})
-          } else {
-            writeLog.info({event: 'wrote'})
-            json.write({id: message.id, event: 'wrote', index: index})
-            // Emit an event.
-            emitter.emit('entry', index, message.entry, connection)
-          }
-        })
-      })
-      .end(stringify(message.entry), 'utf8')
-    }
-
-    function sendEntry (index, entry) {
+    function sendEntry (index, entry, callback) {
       if (!reading) return
-      json.write({index: index, entry: entry})
+      json.write({index: index, entry: entry}, callback || noop)
       serverLog.info({event: 'sent', index: index})
     }
 
@@ -169,12 +176,18 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       serverLog.error({error: error})
       json.write({error: error})
       emitter.removeListener('entry', onAppend)
-      if (reading) reading.stream.destroy()
+      if (reading) {
+        reading.stream.destroy()
+        writeQueue.kill()
+        reading.queue.kill()
+      }
       reading = false
       connection.destroy()
     }
   }
 }
+
+function noop () { return }
 
 function readMessage (argument) {
   return (
