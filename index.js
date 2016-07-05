@@ -222,7 +222,6 @@ function writeMessage (argument) {
   return (
     typeof argument === 'object' &&
     has(argument, 'id', function (id) { return id.length > 0 }) &&
-    has(argument, 'type', 'write') &&
     has(argument, 'entry', function (entry) {
       return typeof entry === 'object'
     })

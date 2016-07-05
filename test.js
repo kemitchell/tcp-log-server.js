@@ -9,7 +9,7 @@ var pino = require('pino')
 var tape = require('tape')
 
 simpleTest('confirms writes', {
-  send: [{type: 'write', entry: {a: 1}, id: 'abc123'}],
+  send: [{entry: {a: 1}, id: 'abc123'}],
   receive: [{id: 'abc123', index: 1}]
 })
 
@@ -25,7 +25,7 @@ simpleTest('duplicate read', {
 
 simpleTest('simple sync', {
   send: [
-    {type: 'write', entry: {a: 1}, id: 'abc123'},
+    {entry: {a: 1}, id: 'abc123'},
     {type: 'read', from: 0}
   ],
   receive: [
@@ -51,17 +51,17 @@ tape('writes before and after read', function (test) {
         test.end()
       }
     })
-    client.write({type: 'write', entry: {a: 1}, id: 'first'})
+    client.write({entry: {a: 1}, id: 'first'})
     client.write({type: 'read', from: 0})
-    client.write({type: 'write', entry: {b: 2}, id: 'second'})
+    client.write({entry: {b: 2}, id: 'second'})
   })
 })
 
 simpleTest('writes before and after read', {
   send: [
-    {type: 'write', entry: {a: 1}, id: 'first write'},
+    {entry: {a: 1}, id: 'first write'},
     {type: 'read', from: 0},
-    {type: 'write', entry: {b: 2}, id: 'second write'}
+    {entry: {b: 2}, id: 'second write'}
   ],
   receive: [
     {current: true},
@@ -103,8 +103,8 @@ tape('two clients', function (test) {
     })
     ana.write({type: 'read', from: 0})
     bob.write({type: 'read', from: 0})
-    ana.write({type: 'write', entry: anaWasHere, id: 'first'})
-    bob.write({type: 'write', entry: bobWasHere, id: 'second'})
+    ana.write({entry: anaWasHere, id: 'first'})
+    bob.write({entry: bobWasHere, id: 'second'})
   })
 })
 
@@ -119,7 +119,7 @@ tape('old entry', function (test) {
         test.end()
       }
     })
-    client.write({type: 'write', entry: entry, id: 'first'})
+    client.write({entry: entry, id: 'first'})
     setTimeout(function () {
       client.write({type: 'read', from: 0})
     }, 25)
@@ -143,8 +143,8 @@ tape('read from future index', function (test) {
       }
     })
     readingClient.write({type: 'read', from: 2})
-    writingClient.write({type: 'write', entry: entries[0], id: 'first'})
-    writingClient.write({type: 'write', entry: entries[1], id: 'second'})
+    writingClient.write({entry: entries[0], id: 'first'})
+    writingClient.write({entry: entries[1], id: 'second'})
     writingClient.end()
   })
 })
@@ -170,12 +170,12 @@ tape('current signal', function (test) {
         test.end()
       }
     })
-    writingClient.write({type: 'write', entry: entries[0], id: 'first'})
-    writingClient.write({type: 'write', entry: entries[1], id: 'second'})
+    writingClient.write({entry: entries[0], id: 'first'})
+    writingClient.write({entry: entries[1], id: 'second'})
     setTimeout(function () {
       readingClient.write({type: 'read', from: 0})
       setTimeout(function () {
-        writingClient.end({type: 'write', entry: entries[2], id: 'third'})
+        writingClient.end({entry: entries[2], id: 'third'})
       }, 50)
     }, 50)
   })

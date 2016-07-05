@@ -74,7 +74,7 @@ message was received.
 ### Write
 
 ```json
-{"type":"write","id":"some-id","entry":{"arbitrary":"data"}}
+{"id":"some-id","entry":{"arbitrary":"data"}}
 ```
 
 `require('uuid').v4()`, with the [uuid] package, is an easy way to
