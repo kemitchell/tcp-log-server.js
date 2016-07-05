@@ -7,8 +7,8 @@ var uuid = require('uuid')
 
 var LOG_NAME = 'log'
 
-module.exports = function (serverLog, logs, blobs, emitter) {
-  return function (connection) {
+module.exports = function factory (serverLog, logs, blobs, emitter) {
+  return function tcpConnectionHandler (connection) {
     // Conncetions will be held open long-term, and may site idle.  Enable
     // keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
@@ -66,7 +66,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     // An asynchronous queue for appending to the log. Ensures that each
     // append operation can read the head of the log and number itself
     // appropriately.
-    var writeQueue = asyncQueue(function (message, done) {
+    var writeQueue = asyncQueue(function write (message, done) {
       // Compute the hash of the entry's content.
       var content = stringify(message.entry)
       var hash = sha256(content)
@@ -78,10 +78,10 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         writeLog.error(error)
         json.write({id: message.id, error: error.toString()}, done)
       })
-      .once('finish', function () {
+      .once('finish', function appendToLog () {
         // Append an entry to the log with the hash of the entry.
         writeLog.info({event: 'appending', hash: hash})
-        logs.append(LOG_NAME, hash, function (error, index) {
+        logs.append(LOG_NAME, hash, function yieldResult (error, index) {
           /* istanbul ignore if */
           if (error) {
             writeLog.error(error)
@@ -100,7 +100,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
     })
 
     // Route client messages to appropriate handlers.
-    json.on('data', function (message) {
+    json.on('data', function routeMessage (message) {
       serverLog.info({event: 'message', message: message})
       if (readMessage(message)) onReadMessage(message)
       else if (writeMessage(message)) writeQueue.push(message)
@@ -117,7 +117,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
         doneStreaming: false,
         buffer: [],
         from: message.from,
-        queue: asyncQueue(function (task, done) {
+        queue: asyncQueue(function send (task, done) {
           var chunks = []
           // Use the hash from LevelUP to look up the message data in
           // the blob store.
@@ -127,7 +127,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
             serverLog.error(error)
             json.write({index: task.seq, error: error.toString()})
           })
-          .once('end', function () {
+          .once('end', function queueForSending () {
             sendEntry(task.seq, JSON.parse(Buffer.concat(chunks)), done)
           })
         })
@@ -147,7 +147,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
       .once('error', /* istanbul ignore next */ function (error) {
         if (reading) disconnect(error.toString())
       })
-      .once('end', function () {
+      .once('end', function sendBufferedAndForward () {
         if (!reading) return
         streamLog.info({event: 'end'})
         // Phase 2: Entries may have been written while we were
@@ -157,7 +157,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           function (message, iterator, done) {
             sendEntry(message.index, message.entry, done)
           },
-          function () {
+          function startForwarding () {
             // Mark the stream done so messages sent via the
             // EventEmitter will be written out to the socket, rather
             // than buffered.
