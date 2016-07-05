@@ -97,3 +97,11 @@ If there is an error, the server will instead respond:
 ```json
 {"id":"some-id-string","error":"error-string"}
 ```
+
+### Read Errors
+
+Servers may report errors reading specific log entries:
+
+```json
+{"index":45,"error":"some-error"}
+```

@@ -125,7 +125,7 @@ module.exports = function (serverLog, logs, blobs, emitter) {
           .on('data', function (chunk) { chunks.push(chunk) })
           .once('error', /* istanbul ignore next */ function (error) {
             serverLog.error(error)
-            json.write({blob: task.value, error: error.toString()})
+            json.write({index: task.seq, error: error.toString()})
           })
           .once('end', function () {
             sendEntry(task.seq, JSON.parse(Buffer.concat(chunks)), done)
