@@ -71,14 +71,12 @@ will be sent like:
 {"index":"1","entry":{"some":"entry"}}
 ```
 
-The server will send:
+When the server has sent all entries in the log as of the time the
+read message was received, it will send:
 
 ```json
 {"current":true}
 ```
-
-once it has sent all entries in the log as of the time the read
-message was received.
 
 ### Write
 
