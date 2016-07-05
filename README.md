@@ -35,11 +35,15 @@ Configure `tcp-log-server` with environment variables:
 The package exports a factory function.  Given a [pino] log, a
 [LevelUP] instance, an [abstract-blob-store], and an `EventEmitter`,
 it returns a TCP connection handler function suitable for
-`net.createServer(handler)`.
+`net.createServer(handler)`.  Any [LevelDOWN] and [abstract-blob-store]
+will do.  Store log entires or blobs in memory, in a remote store,
+or in whatever combination you like.
 
 [LevelUP]: https://npmjs.com/packages/levelup
 
 [abstract-blob-store]: https://npmjs.com/packages/abstract-blob-store
+
+[LevelDOWN]: https://www.npmjs.com/package/abstract-leveldown
 
 ## Protocol
 
