@@ -52,7 +52,7 @@ Clients can send:
 ### Read
 
 ```json
-{"type":"read","from":0}
+{"from":0}
 ```
 
 On receipt, the server will begin sending log entries with indices

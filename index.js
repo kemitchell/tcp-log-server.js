@@ -213,7 +213,6 @@ function noop () { return }
 function readMessage (argument) {
   return (
     typeof argument === 'object' &&
-    has(argument, 'type', 'read') &&
     has(argument, 'from', isPositiveInteger)
   )
 }
