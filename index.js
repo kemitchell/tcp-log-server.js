@@ -1,8 +1,10 @@
-var asyncEachSeries = require('async.eachseries')
 var asyncQueue = require('async.queue')
+var concatStream = require('concat-stream')
 var duplexJSON = require('duplex-json-stream')
+var endOfStream = require('end-of-stream')
 var sha256 = require('sha256')
 var stringify = require('json-stable-stringify')
+var through2 = require('through2')
 var uuid = require('uuid')
 
 var LOG_NAME = 'log'
@@ -45,8 +47,6 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
     //   doneStreaming is true.
     //
     // - from (Number): The index of the first entry to send.
-    //
-    // - queue (async.queue): Queue of entries to send.
     var reading = false
 
     // A read advances, in order, through three phases:
@@ -113,25 +113,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
     // Handle read requests.
     function onReadMessage (message) {
       if (reading) return disconnect('already reading')
-      reading = {
-        doneStreaming: false,
-        buffer: [],
-        from: message.from,
-        queue: asyncQueue(function send (task, done) {
-          var chunks = []
-          // Use the hash from LevelUP to look up the message data in
-          // the blob store.
-          blobs.createReadStream({key: hashToPath(task.value)})
-          .on('data', function (chunk) { chunks.push(chunk) })
-          .once('error', /* istanbul ignore next */ function (error) {
-            serverLog.error(error)
-            json.write({index: task.seq, error: error.toString()})
-          })
-          .once('end', function queueForSending () {
-            sendEntry(task.seq, JSON.parse(Buffer.concat(chunks)), done)
-          })
-        })
-      }
+      reading = {doneStreaming: false, buffer: [], from: message.from}
 
       // Start buffering new entries appended while sending old entries.
       emitter.addListener('entry', onAppend)
@@ -140,33 +122,27 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
       var streamLog = serverLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
       var streamOptions = {since: message.from - 1}
-      var stream = logs.createReadStream(LOG_NAME, streamOptions)
-      reading.stream = stream
-      stream
-      .on('data', function (data) { reading.queue.push(data) })
-      .once('error', /* istanbul ignore next */ function (error) {
-        if (reading) disconnect(error.toString())
+      var levelReadStream = logs.createReadStream(LOG_NAME, streamOptions)
+      reading.stream = levelReadStream
+      var transform = through2.obj(function (logEntry, _, done) {
+        blobs.createReadStream({key: hashToPath(logEntry.value)})
+        .once('error', function (error) { disconnect(error.toString()) })
+        .pipe(concatStream(function (json) {
+          done(null, {index: logEntry.seq, entry: JSON.parse(json)})
+        }))
       })
-      .once('end', function sendBufferedAndForward () {
-        if (!reading) return
-        streamLog.info({event: 'end'})
-        // Phase 2: Entries may have been written while we were
-        // streaming from LevelUP. Send them now.
-        asyncEachSeries(
-          reading.buffer,
-          function (message, iterator, done) {
-            sendEntry(message.index, message.entry, done)
-          },
-          function startForwarding () {
-            // Mark the stream done so messages sent via the
-            // EventEmitter will be written out to the socket, rather
-            // than buffered.
-            reading.buffer = null
-            reading.doneStreaming = true
-            // Send up-to-date message.
-            json.write({current: true})
-          }
-        )
+      levelReadStream.pipe(transform).pipe(json, {end: false})
+      endOfStream(levelReadStream, function (error) {
+        if (error) disconnect(error.toString())
+        else {
+          // Mark the stream done so messages sent via the
+          // EventEmitter will be written out to the socket, rather
+          // than buffered.
+          reading.buffer = null
+          reading.doneStreaming = true
+          // Send up-to-date message.
+          json.write({current: true})
+        }
       })
     }
 
@@ -200,7 +176,6 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
       if (reading) {
         reading.stream.destroy()
         writeQueue.kill()
-        reading.queue.kill()
       }
       reading = false
       connection.destroy()
