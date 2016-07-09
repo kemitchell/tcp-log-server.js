@@ -126,7 +126,9 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
       reading.stream = levelReadStream
       var transform = through2.obj(function (logEntry, _, done) {
         blobs.createReadStream({key: hashToPath(logEntry.value)})
-        .once('error', function (error) { disconnect(error.toString()) })
+        .once('error', /* istanbul ignore next */ function (error) {
+          disconnect(error.toString())
+        })
         .pipe(concatStream(function (json) {
           done(null, {index: logEntry.seq, entry: JSON.parse(json)})
         }))
@@ -138,6 +140,9 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
           // Mark the stream done so messages sent via the
           // EventEmitter will be written out to the socket, rather
           // than buffered.
+          reading.buffer.forEach(function (buffered) {
+            json.write(buffered)
+          })
           reading.buffer = null
           reading.doneStreaming = true
           // Send up-to-date message.

@@ -65,6 +65,50 @@ simpleTest('writes before and after read', {
   ]
 })
 
+tape('buffering', function (test) {
+  testConnections(2, function (clients, server) {
+    var reading = clients[0]
+    var writing = clients[1]
+    var received = []
+    var receivedCurrent = false
+    reading.on('data', function (data) {
+      if (data.current) receivedCurrent = true
+      else received.push(data)
+      if (received.length === 200) {
+        test.pass('received 200 entries')
+        test.assert(received.every(function (element, index) {
+          console.log('%s is %j', 'element', element)
+          return element.entry.i === index
+        }), 'received entries in order')
+        test.assert(receivedCurrent, 'received current')
+        reading.end()
+        writing.end()
+        server.close()
+        test.end()
+      }
+    })
+    // Append 100 entries, so the reading client's request will trigger a
+    // long-running LevelUP read stream.
+    var counter = 0
+    for (; counter < 100; counter++) {
+      writing.write({entry: {i: counter}, id: counter.toString()})
+    }
+    // Wait for the log server to write the entries to its LevelUP.
+    setTimeout(function () {
+      // Request a read.
+      reading.write({from: 1})
+      setImmediate(function () {
+        // Append another 100 entries. Some of these should reach the server
+        // while it is streaming from LevelUP to respond to the reading client.
+        // That triggers buffering.
+        for (; counter < 200; counter++) {
+          writing.write({entry: {i: counter}, id: counter.toString()})
+        }
+      })
+    }, 250)
+  })
+})
+
 tape('two clients', function (test) {
   testConnections(2, function (clients, server) {
     var ana = clients[0]
