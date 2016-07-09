@@ -10,11 +10,11 @@ var LOG_NAME = 'log'
 
 module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction) {
   return function tcpConnectionHandler (connection) {
-    // Conncetions will be held open long-term, and may site idle.  Enable
+    // Connections will be held open long-term, and may site idle.  Enable
     // keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
 
-    // Sert up a child log for just this connection, identified by UUID.
+    // Set up a child log for just this connection, identified by UUID.
     var connectionLog = serverLog.child({connection: uuid.v4()})
     connectionLog.info({
       event: 'connected',
