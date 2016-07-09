@@ -155,6 +155,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
 
       /* istanbul ignore next */
       function fail (error) {
+        streamLog.error(error)
         disconnect(error.toString())
         levelReadStream.destroy()
         transform.destroy()
