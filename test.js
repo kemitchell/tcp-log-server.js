@@ -77,7 +77,6 @@ tape('buffering', function (test) {
       if (received.length === 200) {
         test.pass('received 200 entries')
         test.assert(received.every(function (element, index) {
-          console.log('%s is %j', 'element', element)
           return element.entry.i === index
         }), 'received entries in order')
         test.assert(receivedCurrent, 'received current')
