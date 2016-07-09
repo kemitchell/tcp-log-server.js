@@ -151,7 +151,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
           // than buffered.
           reading.buffer.forEach(function (buffered) {
             streamLog.info({event: 'unbuffer', index: buffered.index})
-            json.write(buffered)
+            sendEntry(buffered.index, buffered.entry)
           })
           reading.buffer = null
           reading.doneStreaming = true
