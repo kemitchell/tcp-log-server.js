@@ -36,21 +36,20 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
     var json = duplexJSON(connection)
     .once('error', function () { disconnect('invalid JSON') })
 
-    // An object recording information about the state of reading from
-    // the log.
+    // Whether the client is currently reading the log. When reading, an
+    // object recording information about the state of the read.
     //
-    // - doneStreaming (boolean): The server is done streaming old
+    // - doneStreaming (Boolean): The server is done streaming old
     //   entries.
     //
-    // - buffer (array): Contains entries made after the server
+    // - buffer (Array): Contains entries made after the server
     //   started streaming old entries, but before it finished.
     //
-    // - stream (stream): The stream of log entries, or null when
-    //   doneStreaming is true.
+    // - stream (Stream): The stream of log entries from LevelUP, or
+    //   null when doneStreaming is true.
     //
     // - from (Number): The index of the first entry to send.
-    var reading = false
-
+    //
     // A read advances, in order, through three phases:
     //
     // Phase 1. Streaming entries from a snapshot of the LevelUP store
@@ -60,10 +59,11 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
     // Phase 2. Sending entries that were buffered while completing
     //          Phase 1.
     //
-    // Phase 3. Sending entries as they are written.
+    // Phase 3. Forwarding entries as they are written.
     //
     // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
     // relevant places below.
+    var reading = false
 
     // An asynchronous queue for appending to the log. Ensures that each
     // append operation can read the head of the log and number itself
@@ -91,8 +91,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
           } else {
             writeLog.info({event: 'wrote'})
             // Send confirmation.
-            var confirmation = {id: message.id, index: index}
-            json.write(confirmation, done)
+            json.write({id: message.id, index: index}, done)
             // Emit an event.
             emitter.emit('entry', index, message.entry, connection)
           }
@@ -104,8 +103,12 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
     // Route client messages to appropriate handlers.
     json.on('data', function routeMessage (message) {
       connectionLog.info({event: 'message', message: message})
-      if (readMessage(message)) onReadMessage(message)
-      else if (writeMessage(message)) writeQueue.push(message)
+      if (readMessage(message)) {
+        if (reading) {
+          connectionLog.warn('already reading')
+          json.write({error: 'already reading'})
+        } else onReadMessage(message)
+      } else if (writeMessage(message)) writeQueue.push(message)
       else {
         connectionLog.warn({event: 'invalid', message: message})
         json.write({error: 'invalid message'})
@@ -114,11 +117,6 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
 
     // Handle read requests.
     function onReadMessage (message) {
-      if (reading) {
-        connectionLog.warn('already reading')
-        json.write({error: 'already reading'})
-        return
-      }
       reading = {doneStreaming: false, buffer: [], from: message.from}
 
       // Start buffering new entries appended while sending old entries.
@@ -127,9 +125,13 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       // Phase 1: Stream index-hash pairs from the LevelUP store.
       var streamLog = connectionLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
+
       var streamOptions = {since: message.from - 1}
       var levelReadStream = logs.createReadStream(LOG_NAME, streamOptions)
       reading.stream = levelReadStream
+
+      // For each index-hash pair, read the corresponding content from
+      // the blog store and forward a complete entry object.
       var transform = through2.obj(function (logEntry, _, done) {
         blobs.createReadStream({key: hashToPath(logEntry.value)})
         .once('error', fail)
@@ -137,18 +139,28 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
           done(null, {index: logEntry.seq, entry: JSON.parse(json)})
         }))
       })
+
       levelReadStream
         .once('error', fail)
         .pipe(transform)
         .once('error', fail)
         .pipe(json, {end: false})
+
+      /* istanbul ignore next */
+      function fail (error) {
+        streamLog.error(error)
+        disconnect(error.toString())
+        levelReadStream.destroy()
+        transform.destroy()
+        json.destroy()
+      }
+
       endOfStream(levelReadStream, function (error) {
         /* istanbul ignore if */
         if (error) disconnect(error.toString())
         else {
-          // Mark the stream done so messages sent via the
-          // EventEmitter will be written out to the socket, rather
-          // than buffered.
+          // Mark the stream done so messages sent via the EventEmitter
+          // will be written out to the socket, rather than buffered.
           reading.buffer.forEach(function (buffered) {
             streamLog.info({event: 'unbuffer', index: buffered.index})
             sendEntry(buffered.index, buffered.entry)
@@ -159,15 +171,6 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
           json.write({current: true})
         }
       })
-
-      /* istanbul ignore next */
-      function fail (error) {
-        streamLog.error(error)
-        disconnect(error.toString())
-        levelReadStream.destroy()
-        transform.destroy()
-        json.destroy()
-      }
     }
 
     function onAppend (index, entry, fromConnection) {
