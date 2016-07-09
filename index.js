@@ -25,6 +25,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
     // Log end-of-connection events.
     connection
     .once('end', function () { connectionLog.info({event: 'end'}) })
+    .once('error', function (error) { connectionLog.error(error) })
     .once('close', function (error) {
       connectionLog.info({event: 'close', error: error})
     })
