@@ -79,6 +79,12 @@ will be sent like:
 {"index":"1","entry":{"some":"entry"}}
 ```
 
+Servers may report errors reading specific log entries:
+
+```json
+{"index":45,"error":"some-error"}
+```
+
 When the server has sent all entries in the log as of the time the
 read message was received, it will send:
 
@@ -108,12 +114,4 @@ If there is an error, the server will instead respond:
 
 ```json
 {"id":"some-id-string","error":"error-string"}
-```
-
-### Read Errors
-
-Servers may report errors reading specific log entries:
-
-```json
-{"index":45,"error":"some-error"}
 ```
