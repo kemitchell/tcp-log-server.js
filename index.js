@@ -140,6 +140,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
         .once('error', fail)
         .pipe(json, {end: false})
       endOfStream(levelReadStream, function (error) {
+        /* istanbul ignore if */
         if (error) disconnect(error.toString())
         else {
           // Mark the stream done so messages sent via the
