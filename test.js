@@ -283,8 +283,11 @@ function simpleTest (name, options) {
             server.close()
             test.end()
           }, 100)
-        } else if (received.length > expected.length) {
-          test.fail('too many messages received')
+        } else {
+          /* istanbul ignore next */
+          if (received.length > expected.length) {
+            test.fail('too many messages received')
+          }
         }
       })
       options.send.forEach(function (message) {
