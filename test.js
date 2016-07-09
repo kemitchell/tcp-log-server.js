@@ -6,6 +6,7 @@ var levelup = require('levelup')
 var memdown = require('memdown')
 var net = require('net')
 var pino = require('pino')
+var sha256 = require('sha256')
 var tape = require('tape')
 
 simpleTest('confirms writes', {
@@ -311,7 +312,7 @@ function testConnections (numberOfClients, callback) {
   // Pipe log messages to nowhere.
   var log = pino({}, devnull())
   var emitter = new (require('events').EventEmitter)()
-  var handler = require('./')(log, logs, blobs, emitter)
+  var handler = require('./')(log, logs, blobs, emitter, sha256)
   var server = net.createServer()
   .on('connection', handler)
   .once('close', function () { level.close() })

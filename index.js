@@ -2,14 +2,13 @@ var asyncQueue = require('async.queue')
 var concatStream = require('concat-stream')
 var duplexJSON = require('duplex-json-stream')
 var endOfStream = require('end-of-stream')
-var sha256 = require('sha256')
 var stringify = require('json-stable-stringify')
 var through2 = require('through2')
 var uuid = require('uuid')
 
 var LOG_NAME = 'log'
 
-module.exports = function factory (serverLog, logs, blobs, emitter) {
+module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction) {
   return function tcpConnectionHandler (connection) {
     // Conncetions will be held open long-term, and may site idle.  Enable
     // keep-alive to keep them from dropping.
@@ -69,7 +68,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
     var writeQueue = asyncQueue(function write (message, done) {
       // Compute the hash of the entry's content.
       var content = stringify(message.entry)
-      var hash = sha256(content)
+      var hash = hashFunction(content)
       // Create a child log for this entry write.
       var writeLog = serverLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
