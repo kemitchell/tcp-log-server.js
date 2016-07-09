@@ -179,7 +179,6 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
     }
 
     function sendEntry (index, entry, callback) {
-      if (!reading) return
       json.write({index: index, entry: entry}, callback || noop)
       serverLog.info({event: 'sent', index: index})
     }
