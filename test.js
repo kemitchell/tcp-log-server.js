@@ -263,10 +263,25 @@ tape('invalid message', function (test) {
 })
 
 tape('invalid json', function (test) {
-  testConnections(0, function (_, server, port) {
-    var client = net.connect({port: port})
-    .on('connect', function () { client.write('not JSON\n') })
-    .on('close', function () {
+  testConnections(1, function (client, server, port) {
+    client.socket
+    .once('connect', function () { client.socket.write('not JSON\n') })
+    .once('close', function () {
+      test.pass('connection closed by server')
+      server.close()
+      test.end()
+    })
+  })
+})
+
+tape('invalid json during read', function (test) {
+  testConnections(1, function (client, server, port) {
+    client.socket
+    .once('connect', function () {
+      client.write({from: 1})
+      client.socket.write('not JSON\n')
+    })
+    .once('close', function () {
       test.pass('connection closed by server')
       server.close()
       test.end()
@@ -322,6 +337,7 @@ function testConnections (numberOfClients, callback) {
     for (var n = 0; n < numberOfClients; n++) {
       var client = net.connect(serverPort)
       var clientJSON = duplexJSON(client)
+      clientJSON.socket = client
       clients.push(clientJSON)
     }
     if (numberOfClients === 1) callback(clients[0], server, serverPort)
