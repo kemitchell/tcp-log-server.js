@@ -126,14 +126,16 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
       reading.stream = levelReadStream
       var transform = through2.obj(function (logEntry, _, done) {
         blobs.createReadStream({key: hashToPath(logEntry.value)})
-        .once('error', /* istanbul ignore next */ function (error) {
-          disconnect(error.toString())
-        })
+        .once('error', fail)
         .pipe(concatStream(function (json) {
           done(null, {index: logEntry.seq, entry: JSON.parse(json)})
         }))
       })
-      levelReadStream.pipe(transform).pipe(json, {end: false})
+      levelReadStream
+        .once('error', fail)
+        .pipe(transform)
+        .once('error', fail)
+        .pipe(json, {end: false})
       endOfStream(levelReadStream, function (error) {
         if (error) disconnect(error.toString())
         else {
@@ -149,6 +151,14 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
           json.write({current: true})
         }
       })
+
+      /* istanbul ignore next */
+      function fail (error) {
+        disconnect(error.toString())
+        levelReadStream.destroy()
+        transform.destroy()
+        json.destroy()
+      }
     }
 
     function onAppend (index, entry, fromConnection) {
