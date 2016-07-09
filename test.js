@@ -16,7 +16,7 @@ simpleTest('confirms writes', {
 
 simpleTest('duplicate read', {
   send: [{from: 1}, {from: 1}],
-  receive: [{error: 'already reading'}]
+  receive: [{error: 'already reading'}, {current: true}]
 })
 
 simpleTest('simple sync', {

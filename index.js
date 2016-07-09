@@ -15,8 +15,8 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
     connection.setKeepAlive(true)
 
     // Sert up a child log for just this connection, identified by UUID.
-    serverLog = serverLog.child({connection: uuid.v4()})
-    serverLog.info({
+    var connectionLog = serverLog.child({connection: uuid.v4()})
+    connectionLog.info({
       event: 'connected',
       address: connection.remoteAddress,
       port: connection.removePort
@@ -24,9 +24,9 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
 
     // Log end-of-connection events.
     connection
-    .once('end', function () { serverLog.info({event: 'end'}) })
+    .once('end', function () { connectionLog.info({event: 'end'}) })
     .once('close', function (error) {
-      serverLog.info({event: 'close', error: error})
+      connectionLog.info({event: 'close', error: error})
     })
 
     // Send newline-delimited JSON back and forth across the connection.
@@ -70,7 +70,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       var content = stringify(message.entry)
       var hash = hashFunction(content)
       // Create a child log for this entry write.
-      var writeLog = serverLog.child({hash: hash})
+      var writeLog = connectionLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({key: hashToPath(hash)})
       .once('error', /* istanbul ignore next */ function (error) {
@@ -100,25 +100,29 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
 
     // Route client messages to appropriate handlers.
     json.on('data', function routeMessage (message) {
-      serverLog.info({event: 'message', message: message})
+      connectionLog.info({event: 'message', message: message})
       if (readMessage(message)) onReadMessage(message)
       else if (writeMessage(message)) writeQueue.push(message)
       else {
-        serverLog.warn({event: 'invalid', message: message})
+        connectionLog.warn({event: 'invalid', message: message})
         json.write({error: 'invalid message'})
       }
     })
 
     // Handle read requests.
     function onReadMessage (message) {
-      if (reading) return disconnect('already reading')
+      if (reading) {
+        connectionLog.warn('already reading')
+        json.write({error: 'already reading'})
+        return
+      }
       reading = {doneStreaming: false, buffer: [], from: message.from}
 
       // Start buffering new entries appended while sending old entries.
       emitter.addListener('entry', onAppend)
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
-      var streamLog = serverLog.child({phase: 'stream'})
+      var streamLog = connectionLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
       var streamOptions = {since: message.from - 1}
       var levelReadStream = logs.createReadStream(LOG_NAME, streamOptions)
@@ -167,22 +171,22 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       if (reading.from > index) return
       // Phase 3:
       if (reading.doneStreaming) {
-        serverLog.info({event: 'forward', index: index})
+        connectionLog.info({event: 'forward', index: index})
         sendEntry(index, entry)
       // Waiting for Phase 2
       } else {
-        serverLog.info({event: 'buffer', index: index})
+        connectionLog.info({event: 'buffer', index: index})
         reading.buffer.push({index: index, entry: entry})
       }
     }
 
     function sendEntry (index, entry, callback) {
       json.write({index: index, entry: entry}, callback || noop)
-      serverLog.info({event: 'sent', index: index})
+      connectionLog.info({event: 'sent', index: index})
     }
 
     function disconnect (error) {
-      serverLog.error({error: error})
+      connectionLog.error({error: error})
       json.write({error: error})
       emitter.removeListener('entry', onAppend)
       if (reading) {
