@@ -4,7 +4,7 @@ var duplexJSON = require('duplex-json-stream')
 var endOfStream = require('end-of-stream')
 var stringify = require('json-stable-stringify')
 var through2 = require('through2')
-var uuid = require('uuid')
+var uuid = require('uuid').v4
 
 var LOG_NAME = 'log'
 
@@ -15,7 +15,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
     connection.setKeepAlive(true)
 
     // Set up a child log for just this connection, identified by UUID.
-    var connectionLog = serverLog.child({connection: uuid.v4()})
+    var connectionLog = serverLog.child({connection: uuid()})
     connectionLog.info({
       event: 'connected',
       address: connection.remoteAddress,
