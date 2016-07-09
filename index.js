@@ -122,7 +122,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       reading = {doneStreaming: false, buffer: [], from: message.from}
 
       // Start buffering new entries appended while sending old entries.
-      emitter.addListener('entry', onAppend)
+      setImmediate(emitter.addListener.bind(emitter, 'entry', onAppend))
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
       var streamLog = connectionLog.child({phase: 'stream'})
