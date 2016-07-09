@@ -25,7 +25,8 @@ simpleTest('simple sync', {
   ],
   receive: [
     {current: true},
-    {id: 'abc123', index: 1}
+    {id: 'abc123', index: 1},
+    {index: 1, entry: {a: 1}}
   ]
 })
 
@@ -35,7 +36,9 @@ tape('writes before and after read', function (test) {
     var expected = [
       {current: true},
       {id: 'first', index: 1},
-      {id: 'second', index: 2}
+      {index: 1, entry: {a: 1}},
+      {id: 'second', index: 2},
+      {index: 2, entry: {b: 2}}
     ]
     client.on('data', function (data) {
       messages.push(data)
@@ -61,7 +64,9 @@ simpleTest('writes before and after read', {
   receive: [
     {current: true},
     {id: 'first write', index: 1},
-    {id: 'second write', index: 2}
+    {index: 1, entry: {a: 1}},
+    {id: 'second write', index: 2},
+    {index: 2, entry: {b: 2}}
   ]
 })
 

@@ -162,9 +162,6 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
     }
 
     function onAppend (index, entry, fromConnection) {
-      // Do not echo data that clients append back to them. They will
-      // receive append confirmations with new entry index.
-      if (fromConnection === connection) return
       // Do not send entries from earlier in the log than requested.
       if (reading.from > index) return
       // Phase 3:

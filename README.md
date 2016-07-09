@@ -104,9 +104,6 @@ index of the newly appended entry.
 {"id":"some-id","index":44}
 ```
 
-The server will _not_ echo the new entry back to the client that
-writes it.
-
 If there is an error, the server will instead respond:
 
 ```json
