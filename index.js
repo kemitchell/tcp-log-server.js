@@ -143,6 +143,7 @@ module.exports = function factory (serverLog, logs, blobs, emitter) {
           // EventEmitter will be written out to the socket, rather
           // than buffered.
           reading.buffer.forEach(function (buffered) {
+            streamLog.info({event: 'unbuffer', index: buffered.index})
             json.write(buffered)
           })
           reading.buffer = null
