@@ -1,7 +1,7 @@
 {
   "name": "tcp-log-server",
   "description": "serve an append-only log over TCP",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "author": "Kyle E. Mitchell <kyle@kemitchell.com> (https://kemitchell.com/)",
   "bin": "./server.js",
   "dependencies": {
