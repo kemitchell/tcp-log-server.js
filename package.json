@@ -29,6 +29,13 @@
     "standard": "^7.1.2",
     "tape": "^4.6.0"
   },
+  "keywords": [
+    "TCP",
+    "client",
+    "database",
+    "kappa",
+    "log"
+  ],
   "license": "MIT",
   "repository": "kemitchell/tcp-log-server.js",
   "scripts": {
