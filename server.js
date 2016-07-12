@@ -10,7 +10,8 @@ var handler = require('./')(
   pino,
   require('level-logs')(level, {valueEncoding: 'json'}),
   require('fs-blob-store')(BLOBS),
-  new (require('events').EventEmitter)()
+  new (require('events').EventEmitter)(),
+  require('sha256')
 )
 
 var sockets = require('stream-set')()
