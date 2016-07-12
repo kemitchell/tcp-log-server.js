@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 var NAME = require('./package.json').name
-var LEVELDB = process.env.LEVELDB || ('.' + NAME + '.leveldb')
+var LEVELDOWN = process.env.LEVELDOWN || ('.' + NAME + '.leveldb')
 var BLOBS = process.env.BLOBS || ('.' + NAME + '.blobs')
 var PORT = parseInt(process.env.PORT) || 8089
 
-var level = require('levelup')(LEVELDB, {db: require('leveldown')})
+var level = LEVELDOWN === 'memory'
+ ? require('levelup')('tcp-log-server', {db: require('memdown')})
+ : require('levelup')(LEVELDOWN, {db: require('leveldown')})
 var pino = require('pino')()
 var handler = require('./')(
   pino,
   require('level-logs')(level, {valueEncoding: 'json'}),
-  require('fs-blob-store')(BLOBS),
+  BLOBS === 'memory'
+    ? require('abstract-blob-store')()
+    : require('fs-blob-store')(BLOBS),
   new (require('events').EventEmitter)(),
   require('sha256')
 )
