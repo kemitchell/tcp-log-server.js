@@ -20,14 +20,21 @@ var handler = require('./')(
 
 var sockets = require('stream-set')()
 var server = require('net').createServer()
-.on('connection', function (socket) { sockets.add(socket) })
+.on('connection', function (socket) {
+  sockets.add(socket)
+})
 .on('connection', handler)
 
 server.listen(PORT, function () {
-  pino.info({event: 'listening', port: this.address().port})
+  pino.info({
+    event: 'listening',
+    port: this.address().port
+  })
 })
 
 process.on('exit', function () {
-  sockets.forEach(function (socket) { socket.destroy() })
+  sockets.forEach(function (socket) {
+    socket.destroy()
+  })
   server.close()
 })
