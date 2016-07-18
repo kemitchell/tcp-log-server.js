@@ -124,14 +124,14 @@ module.exports = function factory (
     // Route client messages to appropriate handlers.
     json.on('data', function routeMessage (message) {
       connectionLog.info({event: 'message', message: message})
-      if (readMessage(message)) {
+      if (isReadMessage(message)) {
         if (reading) {
           connectionLog.warn('already reading')
           json.write({error: 'already reading'})
         } else {
           onReadMessage(message)
         }
-      } else if (writeMessage(message)) {
+      } else if (isWriteMessage(message)) {
         writeQueue.push(message)
       } else {
         connectionLog.warn({
@@ -265,14 +265,14 @@ function noop () {
   return
 }
 
-function readMessage (argument) {
+function isReadMessage (argument) {
   return (
     typeof argument === 'object' &&
     has(argument, 'from', isPositiveInteger)
   )
 }
 
-function writeMessage (argument) {
+function isWriteMessage (argument) {
   return (
     typeof argument === 'object' &&
     has(argument, 'id', function (id) {
