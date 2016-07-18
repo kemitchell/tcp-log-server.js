@@ -8,10 +8,12 @@ var uuid = require('uuid').v4
 
 var LOG_NAME = 'log'
 
-module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction) {
+module.exports = function factory (
+  serverLog, logs, blobs, emitter, hashFunction
+) {
   return function tcpConnectionHandler (connection) {
-    // Connections will be held open long-term, and may site idle.  Enable
-    // keep-alive to keep them from dropping.
+    // Connections will be held open long-term, and may site idle.
+    // Enable keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
 
     // Set up a child log for just this connection, identified by UUID.
@@ -24,17 +26,24 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
 
     // Log end-of-connection events.
     connection
-    .once('end', function () { connectionLog.info({event: 'end'}) })
+    .once('end', function () {
+      connectionLog.info({event: 'end'})
+    })
     .once('error', /* istanbul ignore next */ function (error) {
       connectionLog.error(error)
     })
     .once('close', function (error) {
-      connectionLog.info({event: 'close', error: error})
+      connectionLog.info({
+        event: 'close',
+        error: error
+      })
     })
 
     // Send newline-delimited JSON back and forth across the connection.
     var json = duplexJSON(connection)
-    .once('error', function () { disconnect('invalid JSON') })
+    .once('error', function () {
+      disconnect('invalid JSON')
+    })
 
     // Whether the client is currently reading the log. When reading, an
     // object recording information about the state of the read.
@@ -78,20 +87,32 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       blobs.createWriteStream({key: hashToPath(hash)})
       .once('error', /* istanbul ignore next */ function (error) {
         writeLog.error(error)
-        json.write({id: message.id, error: error.toString()}, done)
+        json.write({
+          id: message.id,
+          error: error.toString()
+        }, done)
       })
       .once('finish', function appendToLog () {
         // Append an entry to the log with the hash of the entry.
-        writeLog.info({event: 'appending', hash: hash})
-        logs.append(LOG_NAME, hash, function yieldResult (error, index) {
+        writeLog.info({
+          event: 'appending',
+          hash: hash
+        })
+        logs.append(LOG_NAME, hash, function (error, index) {
           /* istanbul ignore if */
           if (error) {
             writeLog.error(error)
-            json.write({id: message.id, error: error.toString()}, done)
+            json.write({
+              id: message.id,
+              error: error.toString()
+            }, done)
           } else {
             writeLog.info({event: 'wrote'})
             // Send confirmation.
-            json.write({id: message.id, index: index}, done)
+            json.write({
+              id: message.id,
+              index: index
+            }, done)
             // Emit an event.
             emitter.emit('entry', index, message.entry, connection)
           }
@@ -107,17 +128,27 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
         if (reading) {
           connectionLog.warn('already reading')
           json.write({error: 'already reading'})
-        } else onReadMessage(message)
-      } else if (writeMessage(message)) writeQueue.push(message)
-      else {
-        connectionLog.warn({event: 'invalid', message: message})
+        } else {
+          onReadMessage(message)
+        }
+      } else if (writeMessage(message)) {
+        writeQueue.push(message)
+      } else {
+        connectionLog.warn({
+          event: 'invalid',
+          message: message
+        })
         json.write({error: 'invalid message'})
       }
     })
 
     // Handle read requests.
     function onReadMessage (message) {
-      reading = {doneStreaming: false, buffer: [], from: message.from}
+      reading = {
+        doneStreaming: false,
+        buffer: [],
+        from: message.from
+      }
 
       // Start buffering new entries appended while sending old entries.
       setImmediate(emitter.addListener.bind(emitter, 'entry', onAppend))
@@ -127,7 +158,9 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       streamLog.info({event: 'create'})
 
       var streamOptions = {since: message.from - 1}
-      var levelReadStream = logs.createReadStream(LOG_NAME, streamOptions)
+      var levelReadStream = logs.createReadStream(
+        LOG_NAME, streamOptions
+      )
       reading.stream = levelReadStream
 
       // For each index-hash pair, read the corresponding content from
@@ -136,7 +169,10 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
         blobs.createReadStream({key: hashToPath(logEntry.value)})
         .once('error', fail)
         .pipe(concatStream(function (json) {
-          done(null, {index: logEntry.seq, entry: JSON.parse(json)})
+          done(null, {
+            index: logEntry.seq,
+            entry: JSON.parse(json)
+          })
         }))
       })
 
@@ -157,12 +193,16 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
 
       endOfStream(levelReadStream, function (error) {
         /* istanbul ignore if */
-        if (error) disconnect(error.toString())
-        else {
+        if (error) {
+          disconnect(error.toString())
+        } else {
           // Mark the stream done so messages sent via the EventEmitter
           // will be written out to the socket, rather than buffered.
           reading.buffer.forEach(function (buffered) {
-            streamLog.info({event: 'unbuffer', index: buffered.index})
+            streamLog.info({
+              event: 'unbuffer',
+              index: buffered.index
+            })
             sendEntry(buffered.index, buffered.entry)
           })
           reading.buffer = null
@@ -178,18 +218,33 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
       if (reading.from > index) return
       // Phase 3:
       if (reading.doneStreaming) {
-        connectionLog.info({event: 'forward', index: index})
+        connectionLog.info({
+          event: 'forward',
+          index: index
+        })
         sendEntry(index, entry)
       // Waiting for Phase 2
       } else {
-        connectionLog.info({event: 'buffer', index: index})
-        reading.buffer.push({index: index, entry: entry})
+        connectionLog.info({
+          event: 'buffer',
+          index: index
+        })
+        reading.buffer.push({
+          index: index,
+          entry: entry
+        })
       }
     }
 
     function sendEntry (index, entry, callback) {
-      json.write({index: index, entry: entry}, callback || noop)
-      connectionLog.info({event: 'sent', index: index})
+      json.write({
+        index: index,
+        entry: entry
+      }, callback || noop)
+      connectionLog.info({
+        event: 'sent',
+        index: index
+      })
     }
 
     function disconnect (error) {
@@ -206,7 +261,9 @@ module.exports = function factory (serverLog, logs, blobs, emitter, hashFunction
   }
 }
 
-function noop () { return }
+function noop () {
+  return
+}
 
 function readMessage (argument) {
   return (
@@ -218,7 +275,9 @@ function readMessage (argument) {
 function writeMessage (argument) {
   return (
     typeof argument === 'object' &&
-    has(argument, 'id', function (id) { return id.length > 0 }) &&
+    has(argument, 'id', function (id) {
+      return id.length > 0
+    }) &&
     has(argument, 'entry', function (entry) {
       return typeof entry === 'object'
     })
