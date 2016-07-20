@@ -100,8 +100,8 @@ tape('buffering', function (test) {
         test.end()
       }
     })
-    // Append 100 entries, so the reading client's request will trigger a
-    // long-running LevelUP read stream.
+    // Append 100 entries, so the reading client's request will trigger
+    // a long-running LevelUP read stream.
     var counter = 0
     for (; counter < 100; counter++) {
       writing.write({entry: {i: counter}, id: counter.toString()})
@@ -111,9 +111,9 @@ tape('buffering', function (test) {
       // Request a read.
       reading.write({from: 1})
       setImmediate(function () {
-        // Append another 100 entries. Some of these should reach the server
-        // while it is streaming from LevelUP to respond to the reading client.
-        // That triggers buffering.
+        // Append another 100 entries. Some of these should reach the
+        // server while it is streaming from LevelUP to respond to the
+        // reading client. That triggers buffering.
         for (; counter < 200; counter++) {
           writing.write({entry: {i: counter}, id: counter.toString()})
         }
