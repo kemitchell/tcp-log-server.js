@@ -1,7 +1,7 @@
+var SimpleLog = require('level-simple-log')
 var deepEqual = require('deep-equal')
 var devnull = require('dev-null')
 var duplexJSON = require('duplex-json-stream')
-var levelLogs = require('level-logs')
 var levelup = require('levelup')
 var net = require('net')
 var pino = require('pino')
@@ -333,13 +333,13 @@ function testConnections (numberOfClients, callback) {
   // Use an in-memory storage back-end.
   var path = LEVELDOWN_PATH + '-' + uuid()
   var level = levelup(path, {db: storageBackEnd})
-  var logs = levelLogs(level, {valueEncoding: 'json'})
+  var dataLog = SimpleLog(level)
   // Use an in-memory blob store.
   var blobs = require('abstract-blob-store')()
   // Pipe log messages to nowhere.
-  var log = pino({}, devnull())
+  var serverLog = pino({}, devnull())
   var emitter = new (require('events').EventEmitter)()
-  var handler = require('./')(log, logs, blobs, emitter, sha256)
+  var handler = require('./')(serverLog, dataLog, blobs, emitter, sha256)
   var server = net.createServer()
   .on('connection', handler)
   .once('close', function () {

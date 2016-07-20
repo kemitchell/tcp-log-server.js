@@ -10,7 +10,7 @@ var level = LEVELDOWN === 'memory'
 var pino = require('pino')()
 var handler = require('./')(
   pino,
-  require('level-logs')(level, {valueEncoding: 'json'}),
+  require('level-simple-log')(level),
   BLOBS === 'memory'
     ? require('abstract-blob-store')()
     : require('fs-blob-store')(BLOBS),

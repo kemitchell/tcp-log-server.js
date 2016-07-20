@@ -6,10 +6,8 @@ var stringify = require('json-stable-stringify')
 var through2 = require('through2')
 var uuid = require('uuid').v4
 
-var LOG_NAME = 'log'
-
 module.exports = function factory (
-  serverLog, logs, blobs, emitter, hashFunction
+  serverLog, dataLog, blobs, emitter, hashFunction
 ) {
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may site idle.
@@ -62,7 +60,7 @@ module.exports = function factory (
     // A read advances, in order, through three phases:
     //
     // Phase 1. Streaming entries from a snapshot of the LevelUP store
-    //          created by `.createReadStream`, fetching their content
+    //          created by `.createStream`, fetching their content
     //          from the blob store.
     //
     // Phase 2. Sending entries that were buffered while completing
@@ -98,7 +96,7 @@ module.exports = function factory (
           event: 'appending',
           hash: hash
         })
-        logs.append(LOG_NAME, hash, function (error, index) {
+        dataLog.append(hash, function (error, index) {
           /* istanbul ignore if */
           if (error) {
             writeLog.error(error)
@@ -159,20 +157,17 @@ module.exports = function factory (
       var streamLog = connectionLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
 
-      var streamOptions = {since: message.from - 1}
-      var levelReadStream = logs.createReadStream(
-        LOG_NAME, streamOptions
-      )
+      var levelReadStream = dataLog.createStream(message.from - 1)
       reading.stream = levelReadStream
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
-      var transform = through2.obj(function (logEntry, _, done) {
-        blobs.createReadStream({key: hashToPath(logEntry.value)})
+      var transform = through2.obj(function (record, _, done) {
+        blobs.createReadStream({key: hashToPath(record.entry)})
         .once('error', fail)
         .pipe(concatStream(function (json) {
           done(null, {
-            index: logEntry.seq,
+            index: record.index,
             entry: JSON.parse(json)
           })
         }))
