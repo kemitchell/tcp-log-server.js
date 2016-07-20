@@ -42,7 +42,7 @@
   "repository": "kemitchell/tcp-log-server.js",
   "scripts": {
     "precoverage": "istanbul cover -- test.js",
-    "coverage": "istanbul check-coverage --statements 100 --functions 100 --branches 100 --lines 100",
+    "coverage": "istanbul check-coverage",
     "lint": "standard",
     "test": "node test.js"
   }
