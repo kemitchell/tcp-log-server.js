@@ -3,11 +3,19 @@ var devnull = require('dev-null')
 var duplexJSON = require('duplex-json-stream')
 var levelLogs = require('level-logs')
 var levelup = require('levelup')
-var memdown = require('memdown')
 var net = require('net')
 var pino = require('pino')
+var rimraf = require('rimraf')
 var sha256 = require('sha256')
 var tape = require('tape')
+var uuid = require('uuid').v4
+
+var LEVELDOWN_PATH
+var LEVELDOWN = (
+  process.env.LEVELDOWN || /* istanbul ignore next */ 'memdown'
+)
+LEVELDOWN_PATH = 'test.' + LEVELDOWN
+var storageBackEnd = require(LEVELDOWN)
 
 simpleTest('confirms writes', {
   send: [{entry: {a: 1}, id: 'abc123'}],
@@ -318,9 +326,13 @@ function simpleTest (name, options) {
 }
 
 function testConnections (numberOfClients, callback) {
-  memdown.clearGlobalStore()
+  /* istanbul ignore next */
+  if (storageBackEnd.clearGlobalStore) {
+    storageBackEnd.clearGlobalStore()
+  }
   // Use an in-memory storage back-end.
-  var level = levelup('', {db: memdown})
+  var path = LEVELDOWN_PATH + '-' + uuid()
+  var level = levelup(path, {db: storageBackEnd})
   var logs = levelLogs(level, {valueEncoding: 'json'})
   // Use an in-memory blob store.
   var blobs = require('abstract-blob-store')()
@@ -330,7 +342,11 @@ function testConnections (numberOfClients, callback) {
   var handler = require('./')(log, logs, blobs, emitter, sha256)
   var server = net.createServer()
   .on('connection', handler)
-  .once('close', function () { level.close() })
+  .once('close', function () {
+    level.close(function () {
+      rimraf.sync(path)
+    })
+  })
   .listen(0, function () {
     var serverPort = this.address().port
     var clients = []

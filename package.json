@@ -25,6 +25,8 @@
     "deep-equal": "^1.0.1",
     "dev-null": "^0.1.1",
     "istanbul": "^0.4.4",
+    "leveldown": "^1.4.6",
+    "rimraf": "^2.5.3",
     "sha256": "^0.2.0",
     "standard": "^7.1.2",
     "tape": "^4.6.0"
