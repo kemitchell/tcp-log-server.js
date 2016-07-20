@@ -151,7 +151,9 @@ module.exports = function factory (
       }
 
       // Start buffering new entries appended while sending old entries.
-      setImmediate(emitter.addListener.bind(emitter, 'entry', onAppend))
+      setImmediate(function () {
+        emitter.addListener('entry', onAppend)
+      })
 
       // Phase 1: Stream index-hash pairs from the LevelUP store.
       var streamLog = connectionLog.child({phase: 'stream'})
@@ -177,10 +179,10 @@ module.exports = function factory (
       })
 
       levelReadStream
-        .once('error', fail)
-        .pipe(transform)
-        .once('error', fail)
-        .pipe(json, {end: false})
+      .once('error', fail)
+      .pipe(transform)
+      .once('error', fail)
+      .pipe(json, {end: false})
 
       /* istanbul ignore next */
       function fail (error) {
