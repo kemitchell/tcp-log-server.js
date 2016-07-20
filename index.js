@@ -191,7 +191,7 @@ module.exports = function factory (
         json.destroy()
       }
 
-      endOfStream(levelReadStream, function (error) {
+      endOfStream(transform, function (error) {
         /* istanbul ignore if */
         if (error) {
           disconnect(error.toString())
