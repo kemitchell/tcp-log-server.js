@@ -157,8 +157,8 @@ module.exports = function factory (
       var streamLog = connectionLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
 
-      var levelReadStream = dataLog.createStream(message.from - 1)
-      reading.stream = levelReadStream
+      var readStream = dataLog.createStream(message.from - 1)
+      reading.stream = readStream
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
@@ -173,7 +173,7 @@ module.exports = function factory (
         }))
       })
 
-      levelReadStream
+      readStream
       .once('error', fail)
       .pipe(transform)
       .once('error', fail)
@@ -183,7 +183,7 @@ module.exports = function factory (
       function fail (error) {
         streamLog.error(error)
         disconnect(error.toString())
-        levelReadStream.destroy()
+        readStream.destroy()
         transform.destroy()
         json.destroy()
       }
