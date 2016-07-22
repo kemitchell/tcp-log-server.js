@@ -1,4 +1,5 @@
 var SimpleLog = require('level-simple-log')
+var crypto = require('crypto')
 var deepEqual = require('deep-equal')
 var devnull = require('dev-null')
 var duplexJSON = require('duplex-json-stream')
@@ -6,9 +7,14 @@ var levelup = require('levelup')
 var net = require('net')
 var pino = require('pino')
 var rimraf = require('rimraf')
-var sha256 = require('sha256')
 var tape = require('tape')
 var uuid = require('uuid').v4
+
+var sha256 = function (argument) {
+  return crypto.createHash('sha256')
+  .update(argument)
+  .digest('hex')
+}
 
 var LEVELDOWN_PATH
 var LEVELDOWN = (
