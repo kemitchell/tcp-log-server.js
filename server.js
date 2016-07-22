@@ -4,6 +4,7 @@ var LEVELDOWN = process.env.LEVELDOWN || ('.' + NAME + '.leveldb')
 var BLOBS = process.env.BLOBS || ('.' + NAME + '.blobs')
 var PORT = parseInt(process.env.PORT) || 8089
 
+var crypto = require('crypto')
 var level = LEVELDOWN === 'memory'
  ? require('levelup')('tcp-log-server', {db: require('memdown')})
  : require('levelup')(LEVELDOWN, {db: require('leveldown')})
@@ -15,7 +16,11 @@ var handler = require('./')(
     ? require('abstract-blob-store')()
     : require('fs-blob-store')(BLOBS),
   new (require('events').EventEmitter)(),
-  require('sha256')
+  function (argument) {
+    return crypto.createHash('sha256')
+    .update(argument)
+    .digest('hex')
+  }
 )
 
 var sockets = require('stream-set')()
