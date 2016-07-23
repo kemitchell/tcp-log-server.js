@@ -4,9 +4,6 @@
   "version": "9.0.0",
   "author": "Kyle E. Mitchell <kyle@kemitchell.com> (https://kemitchell.com/)",
   "bin": "./server.js",
-  "files": [
-    "index.js"
-  ],
   "dependencies": {
     "abstract-blob-store": "^3.2.0",
     "async.queue": "^0.5.2",
@@ -33,6 +30,9 @@
     "standard": "^7.1.2",
     "tape": "^4.6.0"
   },
+  "files": [
+    "index.js"
+  ],
   "keywords": [
     "TCP",
     "client",
@@ -43,9 +43,9 @@
   "license": "MIT",
   "repository": "kemitchell/tcp-log-server.js",
   "scripts": {
-    "precoverage": "istanbul cover -- test.js",
     "coverage": "istanbul check-coverage",
     "lint": "standard",
+    "precoverage": "istanbul cover -- test.js",
     "test": "node test.js"
   }
 }
