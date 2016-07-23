@@ -10,11 +10,11 @@ module.exports = function factory (
   serverLog, dataLog, blobs, emitter, hashFunction
 ) {
   return function tcpConnectionHandler (connection) {
-    // Connections will be held open long-term, and may site idle.
+    // Connections will be held open long-term, and may sit idle.
     // Enable keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
 
-    // Set up a child log for just this connection, identified by UUID.
+    // Set up a child log for this connection, identified by UUID.
     var connectionLog = serverLog.child({connection: uuid()})
     connectionLog.info({
       event: 'connected',
@@ -46,30 +46,17 @@ module.exports = function factory (
     // Whether the client is currently reading the log. When reading, an
     // object recording information about the state of the read.
     //
-    // - doneStreaming (Boolean): The server is done streaming old
-    //   entries.
+    // - doneStreaming (Boolean): Whether the server is done streaming
+    //   old entries from LevelUP.
     //
     // - buffer (Array): Contains entries made after the server
     //   started streaming old entries, but before it finished.
     //
-    // - stream (Stream): The stream of log entries from LevelUP, or
-    //   null when doneStreaming is true.
+    // - streams ([Stream]): Array of streams used to read data.
     //
     // - from (Number): The index of the first entry to send.
     //
-    // A read advances, in order, through three phases:
-    //
-    // Phase 1. Streaming entries from a snapshot of the LevelUP store
-    //          created by `.createStream`, fetching their content
-    //          from the blob store.
-    //
-    // Phase 2. Sending entries that were buffered while completing
-    //          Phase 1.
-    //
-    // Phase 3. Forwarding entries as they are written.
-    //
-    // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
-    // relevant places below.
+    // - through (Number): The index of the last entry to send.
     var reading = false
 
     // An asynchronous queue for appending to the log. Ensures that each
@@ -142,29 +129,52 @@ module.exports = function factory (
 
     // Handle read requests.
     function onReadMessage (message) {
+      // A read advances, in order, through three phases:
+      //
+      // Phase 1. Stream entries from a snapshot of the LevelUP store
+      //          created by `.createStream`, fetching their content
+      //          from the blob store.  Buffer entries appended while
+      //          streaming.
+      //
+      // Phase 2. Send entries that were appended while completing
+      //          Phase 1 from the buffer.
+      //
+      // Phase 3. Forward entries as they are appended.
+      //
+      // Comments with "Phase 1", "Phase 2", and "Phase 3" appear in
+      // relevant places below.
       reading = {
         doneStreaming: false,
         buffer: [],
-        from: message.from
+        streams: [],
+        from: message.from,
+        through: message.from + message.read - 1
       }
 
-      // Start buffering new entries appended while sending old entries.
+      // Start buffering new entries for Phase 2.
       setImmediate(function () {
         emitter.addListener('entry', onAppend)
       })
 
-      // Phase 1: Stream index-hash pairs from the LevelUP store.
+      // Phase 1: Stream entries from the LevelUP store.
       var streamLog = connectionLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
 
-      var readStream = dataLog.createStream(message.from - 1)
-      reading.stream = readStream
+      var readStream = dataLog.createStream({
+        from: message.from - 1,
+        limit: message.read
+      })
+
+      // Track the highest index seen, so we know when we have sent
+      // all the entries requested.
+      var highestIndex = 0
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
       var transform = through2.obj(function (record, _, done) {
+        highestIndex = record.index
         blobs.createReadStream({key: hashToPath(record.entry)})
-        .once('error', fail)
+        .once('error', onFatalError)
         .pipe(concatStream(function (json) {
           done(null, {
             index: record.index,
@@ -173,83 +183,123 @@ module.exports = function factory (
         }))
       })
 
-      readStream
-      .once('error', fail)
-      .pipe(transform)
-      .once('error', fail)
-      .pipe(json, {end: false})
+      // Push references so the streams so they can be unpiped and
+      // destroyed later.
+      reading.streams.push(readStream)
+      reading.streams.push(transform)
 
-      /* istanbul ignore next */
-      function fail (error) {
-        streamLog.error(error)
-        disconnect(error.toString())
-        readStream.destroy()
-        transform.destroy()
-        json.destroy()
-      }
+      // Build the data pipeline.
+      readStream
+      .once('error', onFatalError)
+      .pipe(transform)
+      .once('error', onFatalError)
+      .pipe(json, {end: false})
 
       endOfStream(transform, function (error) {
         /* istanbul ignore if */
         if (error) {
-          disconnect(error.toString())
+          onFatalError(error)
         } else {
-          // Mark the stream done so messages sent via the EventEmitter
-          // will be written out to the socket, rather than buffered.
+          // Phase 2: Send buffered entries.
           reading.buffer.forEach(function (buffered) {
+            highestIndex = buffered.index
             streamLog.info({
               event: 'unbuffer',
               index: buffered.index
             })
             sendEntry(buffered.index, buffered.entry)
           })
-          reading.buffer = null
-          reading.doneStreaming = true
-          // Send up-to-date message.
-          json.write({current: true})
+          if (sentAllRequested()) {
+            finish()
+          } else {
+            json.write({current: true})
+            // Set flags to start Phase 3.
+            reading.doneStreaming = true
+            reading.buffer = null
+          }
         }
       })
-    }
 
-    function onAppend (index, entry, fromConnection) {
-      // Do not send entries from earlier in the log than requested.
-      if (reading.from > index) return
-      // Phase 3:
-      if (reading.doneStreaming) {
-        connectionLog.info({
-          event: 'forward',
-          index: index
+      function onAppend (index, entry, fromConnection) {
+        // Do not send entries from earlier in the log than requested.
+        if (index < reading.from) {
+          return
+        // Do not send entries later than requested.
+        } else if (index > reading.through) {
+          return
+        // Phase 3: Forward entries as they are appended.
+        } else if (reading.doneStreaming) {
+          connectionLog.info({
+            event: 'forward',
+            index: index
+          })
+          sendEntry(index, entry)
+          highestIndex = index
+          if (sentAllRequested()) {
+            finish()
+          }
+        // Buffer for Phase 2.
+        } else {
+          connectionLog.info({
+            event: 'buffer',
+            index: index
+          })
+          reading.buffer.push({
+            index: index,
+            entry: entry
+          })
+        }
+      }
+
+      function sentAllRequested () {
+        return highestIndex === reading.through
+      }
+
+      function finish () {
+        destroyStreams()
+        emitter.removeListener('entry', onAppend)
+        dataLog.head(function (error, head) {
+          /* istanbul ignore if */
+          if (error) {
+            streamLog.error(error)
+            disconnect(error.toString())
+          } else {
+            json.write({head: head})
+          }
         })
-        sendEntry(index, entry)
-      // Waiting for Phase 2
-      } else {
-        connectionLog.info({
-          event: 'buffer',
-          index: index
-        })
-        reading.buffer.push({
+      }
+
+      function sendEntry (index, entry) {
+        json.write({
           index: index,
           entry: entry
         })
+        connectionLog.info({
+          event: 'sent',
+          index: index
+        })
+      }
+
+      /* istanbul ignore next */
+      function onFatalError (error) {
+        streamLog.error(error)
+        emitter.removeListener('entry', onAppend)
+        disconnect(error.toString())
       }
     }
 
-    function sendEntry (index, entry, callback) {
-      json.write({
-        index: index,
-        entry: entry
-      }, callback || noop)
-      connectionLog.info({
-        event: 'sent',
-        index: index
+    function destroyStreams () {
+      reading.streams.forEach(function (stream) {
+        stream.unpipe()
+        stream.destroy()
       })
     }
 
     function disconnect (error) {
       connectionLog.error({error: error})
       json.write({error: error})
-      emitter.removeListener('entry', onAppend)
       if (reading) {
-        reading.stream.destroy()
+        destroyStreams()
         writeQueue.kill()
       }
       reading = false
@@ -258,14 +308,11 @@ module.exports = function factory (
   }
 }
 
-function noop () {
-  return
-}
-
 function isReadMessage (argument) {
   return (
     typeof argument === 'object' &&
-    has(argument, 'from', isPositiveInteger)
+    has(argument, 'from', isPositiveInteger) &&
+    has(argument, 'read', isPositiveInteger)
   )
 }
 
@@ -285,8 +332,8 @@ function has (argument, key, predicate) {
   return (
     argument.hasOwnProperty(key) &&
     typeof predicate === 'function'
-      ? predicate(argument[key])
-      : argument[key] === predicate
+    ? predicate(argument[key])
+    : argument[key] === predicate
   )
 }
 
