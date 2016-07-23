@@ -23,30 +23,39 @@ var LEVELDOWN = (
 LEVELDOWN_PATH = 'test.' + LEVELDOWN
 var storageBackEnd = require(LEVELDOWN)
 
-simpleTest('confirms writes', {
-  send: [{entry: {a: 1}, id: 'abc123'}],
-  receive: [{id: 'abc123', index: 1}]
+tape('confirm writes', function (test) {
+  simpleTest({
+    send: [{entry: {a: 1}, id: 'abc123'}],
+    receive: [{id: 'abc123', index: 1}]
+  }, test)
 })
 
-simpleTest('duplicate read', {
-  send: [{from: 1, read: 1}, {from: 1, read: 1}],
-  receive: [
-    {error: 'already reading'},
-    {current: true}
-  ]
+tape('duplicate read', function (test) {
+  simpleTest({
+    send: [
+      {from: 1, read: 1},
+      {from: 1, read: 1}
+    ],
+    receive: [
+      {error: 'already reading'},
+      {current: true}
+    ]
+  }, test)
 })
 
-simpleTest('simple sync', {
-  send: [
-    {entry: {a: 1}, id: 'abc123'},
-    {from: 1, read: 1}
-  ],
-  receive: [
-    {current: true},
-    {id: 'abc123', index: 1},
-    {index: 1, entry: {a: 1}},
-    {head: 1}
-  ]
+tape('simple sync', function (test) {
+  simpleTest({
+    send: [
+      {entry: {a: 1}, id: 'abc123'},
+      {from: 1, read: 1}
+    ],
+    receive: [
+      {current: true},
+      {id: 'abc123', index: 1},
+      {index: 1, entry: {a: 1}},
+      {head: 1}
+    ]
+  }, test)
 })
 
 tape('writes before and after read', function (test) {
@@ -75,20 +84,22 @@ tape('writes before and after read', function (test) {
   })
 })
 
-simpleTest('writes before and after read', {
-  send: [
-    {entry: {a: 1}, id: 'first write'},
-    {from: 1, read: 2},
-    {entry: {b: 2}, id: 'second write'}
-  ],
-  receive: [
-    {current: true},
-    {id: 'first write', index: 1},
-    {index: 1, entry: {a: 1}},
-    {id: 'second write', index: 2},
-    {index: 2, entry: {b: 2}},
-    {head: 2}
-  ]
+tape('writes before and after read', function (test) {
+  simpleTest({
+    send: [
+      {entry: {a: 1}, id: 'first write'},
+      {from: 1, read: 2},
+      {entry: {b: 2}, id: 'second write'}
+    ],
+    receive: [
+      {current: true},
+      {id: 'first write', index: 1},
+      {index: 1, entry: {a: 1}},
+      {id: 'second write', index: 2},
+      {index: 2, entry: {b: 2}},
+      {head: 2}
+    ]
+  }, test)
 })
 
 tape('buffering', function (test) {
@@ -352,30 +363,28 @@ tape('invalid json during read', function (test) {
   })
 })
 
-function simpleTest (name, options) {
-  tape(name, function (test) {
-    testConnections(1, function (client, server) {
-      var expected = options.receive
-      var received = []
-      client.on('data', function (data) {
-        received.push(data)
-        if (received.length === expected.length) {
-          setTimeout(function () {
-            test.deepEqual(received, expected)
-            client.end()
-            server.close()
-            test.end()
-          }, 100)
-        } else {
-          /* istanbul ignore next */
-          if (received.length > expected.length) {
-            test.fail('too many messages received')
-          }
+function simpleTest (options, test) {
+  testConnections(1, function (client, server) {
+    var expected = options.receive
+    var received = []
+    client.on('data', function (data) {
+      received.push(data)
+      if (received.length === expected.length) {
+        setTimeout(function () {
+          test.deepEqual(received, expected)
+          client.end()
+          server.close()
+          test.end()
+        }, 100)
+      } else {
+        /* istanbul ignore next */
+        if (received.length > expected.length) {
+          test.fail('too many messages received')
         }
-      })
-      options.send.forEach(function (message) {
-        client.write(message)
-      })
+      }
+    })
+    options.send.forEach(function (message) {
+      client.write(message)
     })
   })
 }
