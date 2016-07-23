@@ -70,12 +70,14 @@ Clients can send:
 ### Read
 
 ```json
-{"from":1}
+{"from":1,"read":5}
 ```
 
-On receipt, the server will begin sending log entries with indices
-greater than or equal to `from`.  (The first index is `1`.)  Each entry
-will be sent like:
+On receipt, the server will begin sending up to `read` log entries
+with indices greater than or equal to `from`, in ascending-index order.
+(The lowest possible index is `1`.)
+
+Each entry will be sent like:
 
 ```json
 {"index":"1","entry":{"some":"entry"}}
@@ -87,11 +89,18 @@ Servers may report errors reading specific log entries:
 {"index":45,"error":"some-error"}
 ```
 
-When the server has sent all entries in the log as of the time the
-read message was received, it will send:
+If the server reaches the head of its log before sending `read`
+entries, it will send:
 
 ```json
 {"current":true}
+```
+
+Once the server has sent `read` entries, it will report the index of
+the head of its log:
+
+```json
+{"head":100}
 ```
 
 ### Write

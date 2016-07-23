@@ -145,7 +145,8 @@ module.exports = function factory (
       reading = {
         doneStreaming: false,
         buffer: [],
-        from: message.from
+        from: message.from,
+        through: message.from + message.read - 1
       }
 
       // Start buffering new entries appended while sending old entries.
@@ -157,12 +158,18 @@ module.exports = function factory (
       var streamLog = connectionLog.child({phase: 'stream'})
       streamLog.info({event: 'create'})
 
-      var readStream = dataLog.createStream(message.from - 1)
+      var readStream = dataLog.createStream({
+        from: message.from - 1,
+        limit: message.read
+      })
       reading.stream = readStream
+
+      var highestIndex = 0
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
       var transform = through2.obj(function (record, _, done) {
+        highestIndex = record.index
         blobs.createReadStream({key: hashToPath(record.entry)})
         .once('error', fail)
         .pipe(concatStream(function (json) {
@@ -183,6 +190,7 @@ module.exports = function factory (
       function fail (error) {
         streamLog.error(error)
         disconnect(error.toString())
+        emitter.removeListener('entry', onAppend)
         readStream.destroy()
         transform.destroy()
         json.destroy()
@@ -192,62 +200,86 @@ module.exports = function factory (
         /* istanbul ignore if */
         if (error) {
           disconnect(error.toString())
+          emitter.removeListener('entry', onAppend)
         } else {
-          // Mark the stream done so messages sent via the EventEmitter
-          // will be written out to the socket, rather than buffered.
+          // Unbuffer.
           reading.buffer.forEach(function (buffered) {
+            highestIndex = buffered.index
             streamLog.info({
               event: 'unbuffer',
               index: buffered.index
             })
             sendEntry(buffered.index, buffered.entry)
           })
+          // Mark the stream done so messages sent via the EventEmitter
+          // will be written out to the socket, rather than buffered.
           reading.buffer = null
           reading.doneStreaming = true
-          // Send up-to-date message.
-          json.write({current: true})
+          if (highestIndex === reading.through) {
+            finish()
+          } else {
+            json.write({current: true})
+          }
         }
       })
-    }
 
-    function onAppend (index, entry, fromConnection) {
-      // Do not send entries from earlier in the log than requested.
-      if (reading.from > index) return
-      // Phase 3:
-      if (reading.doneStreaming) {
-        connectionLog.info({
-          event: 'forward',
-          index: index
-        })
-        sendEntry(index, entry)
-      // Waiting for Phase 2
-      } else {
-        connectionLog.info({
-          event: 'buffer',
-          index: index
-        })
-        reading.buffer.push({
-          index: index,
-          entry: entry
+      function onAppend (index, entry, fromConnection) {
+        // Do not send entries from earlier in the log than requested.
+        if (index < reading.from) return
+        // Do not send entries later than requested.
+        if (index > reading.through) return
+        // Phase 3:
+        if (reading.doneStreaming) {
+          connectionLog.info({
+            event: 'forward',
+            index: index
+          })
+          sendEntry(index, entry)
+          highestIndex = index
+          if (highestIndex === reading.through) {
+            finish()
+          }
+        // Waiting for Phase 2
+        } else {
+          connectionLog.info({
+            event: 'buffer',
+            index: index
+          })
+          reading.buffer.push({
+            index: index,
+            entry: entry
+          })
+        }
+      }
+
+      function finish () {
+        transform.end()
+        emitter.removeListener('entry', onAppend)
+        dataLog.head(function (error, head) {
+          if (error) {
+            streamLog.error(error)
+            disconnect(error.toString())
+          } else {
+            json.write({head: head})
+          }
         })
       }
-    }
 
-    function sendEntry (index, entry, callback) {
-      json.write({
-        index: index,
-        entry: entry
-      }, callback || noop)
-      connectionLog.info({
-        event: 'sent',
-        index: index
-      })
+      function sendEntry (index, entry, callback) {
+        json.write({
+          index: index,
+          entry: entry
+        }, callback || noop)
+        connectionLog.info({
+          event: 'sent',
+          index: index
+        })
+      }
     }
 
     function disconnect (error) {
       connectionLog.error({error: error})
       json.write({error: error})
-      emitter.removeListener('entry', onAppend)
       if (reading) {
         reading.stream.destroy()
         writeQueue.kill()
@@ -265,7 +297,8 @@ function noop () {
 function isReadMessage (argument) {
   return (
     typeof argument === 'object' &&
-    has(argument, 'from', isPositiveInteger)
+    has(argument, 'from', isPositiveInteger) &&
+    has(argument, 'read', isPositiveInteger)
   )
 }
 
