@@ -265,6 +265,7 @@ module.exports = function factory (
             disconnect(error.toString())
           } else {
             json.write({head: head})
+            reading = false
           }
         })
       }

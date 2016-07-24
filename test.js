@@ -324,6 +324,47 @@ tape('current signal', function (test) {
   })
 })
 
+tape.only('successive reads', function (test) {
+  testConnections(2, function (clients, server) {
+    var readingClient = clients[0]
+    var writingClient = clients[1]
+    var entries = [{a: 1}, {b: 2}, {c: 3}]
+    var received = []
+    var expected = [
+      {index: 1, entry: entries[0]},
+      {head: 3},
+      {index: 2, entry: entries[1]},
+      {head: 3},
+      {index: 3, entry: entries[2]},
+      {head: 3},
+      {current: true}
+    ]
+    var lastSeen = 0
+    readingClient.on('data', function handler (data) {
+      received.push(data)
+      if (data.index) {
+        lastSeen = data.index
+      } else if (data.head) {
+        readingClient.write({from: lastSeen + 1, read: 1})
+      }
+      if (received.length === expected.length) {
+        this.removeAllListeners()
+        test.deepEqual(received, expected)
+        writingClient.end()
+        readingClient.end()
+        server.close()
+        test.end()
+      }
+    })
+    entries.forEach(function (entry, index) {
+      writingClient.write({entry: entry, id: String(index)})
+    })
+    setTimeout(function () {
+      readingClient.write({from: 1, read: 1})
+    }, 100)
+  })
+})
+
 tape('invalid message', function (test) {
   testConnections(1, function (client, server) {
     client.on('data', function (data) {
