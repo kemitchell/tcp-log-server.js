@@ -27,8 +27,8 @@ Configure `tcp-log-server` with environment variables:
 - `PORT` for TCP
 - `BLOBS` directory for entry JSON files, named by hash, or `memory` to
   store in memory
-- `LEVELDB` directory for [LevelDB] data files, or `memory` to store in
-   memory
+- `LEVELDOWN` directory for [LevelDB] data files, or `memory` to
+  store in memory
 
 [LevelDB]: https://npmjs.com/packages/leveldown
 
