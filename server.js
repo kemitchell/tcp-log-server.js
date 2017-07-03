@@ -18,17 +18,17 @@ var handler = require('./')(
   new (require('events').EventEmitter)(),
   function (argument) {
     return crypto.createHash('sha256')
-    .update(argument)
-    .digest('hex')
+      .update(argument)
+      .digest('hex')
   }
 )
 
 var sockets = require('stream-set')()
 var server = require('net').createServer()
-.on('connection', function (socket) {
-  sockets.add(socket)
-})
-.on('connection', handler)
+  .on('connection', function (socket) {
+    sockets.add(socket)
+  })
+  .on('connection', handler)
 
 server.listen(PORT, function () {
   pino.info({

@@ -12,8 +12,8 @@ var uuid = require('uuid').v4
 
 var sha256 = function (argument) {
   return crypto.createHash('sha256')
-  .update(argument)
-  .digest('hex')
+    .update(argument)
+    .digest('hex')
 }
 
 var LEVELDOWN_PATH
@@ -380,27 +380,27 @@ tape('invalid message', function (test) {
 tape('invalid json', function (test) {
   testConnections(1, function (client, server, port) {
     client.socket
-    .once('connect', function () { client.socket.write('not JSON\n') })
-    .once('close', function () {
-      test.pass('connection closed by server')
-      server.close()
-      test.end()
-    })
+      .once('connect', function () { client.socket.write('not JSON\n') })
+      .once('close', function () {
+        test.pass('connection closed by server')
+        server.close()
+        test.end()
+      })
   })
 })
 
 tape('invalid json during read', function (test) {
   testConnections(1, function (client, server, port) {
     client.socket
-    .once('connect', function () {
-      client.write({from: 1, read: 1})
-      client.socket.write('not JSON\n')
-    })
-    .once('close', function () {
-      test.pass('connection closed by server')
-      server.close()
-      test.end()
-    })
+      .once('connect', function () {
+        client.write({from: 1, read: 1})
+        client.socket.write('not JSON\n')
+      })
+      .once('close', function () {
+        test.pass('connection closed by server')
+        server.close()
+        test.end()
+      })
   })
 })
 
@@ -448,22 +448,25 @@ function testConnections (numberOfClients, callback) {
     serverLog, dataLog, blobs, emitter, sha256
   )
   var server = net.createServer()
-  .on('connection', handler)
-  .once('close', function () {
-    level.close(function () {
-      rimraf.sync(path)
+    .on('connection', handler)
+    .once('close', function () {
+      level.close(function () {
+        rimraf.sync(path)
+      })
     })
-  })
-  .listen(0, function () {
-    var serverPort = this.address().port
-    var clients = []
-    for (var n = 0; n < numberOfClients; n++) {
-      var client = net.connect(serverPort)
-      var clientJSON = duplexJSON(client)
-      clientJSON.socket = client
-      clients.push(clientJSON)
-    }
-    if (numberOfClients === 1) callback(clients[0], server, serverPort)
-    else callback(clients, server, serverPort)
-  })
+    .listen(0, function () {
+      var serverPort = this.address().port
+      var clients = []
+      for (var n = 0; n < numberOfClients; n++) {
+        var client = net.connect(serverPort)
+        var clientJSON = duplexJSON(client)
+        clientJSON.socket = client
+        clients.push(clientJSON)
+      }
+      if (numberOfClients === 1) {
+        callback(clients[0], server, serverPort)
+      } else {
+        callback(clients, server, serverPort)
+      }
+    })
 }

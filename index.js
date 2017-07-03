@@ -24,24 +24,24 @@ module.exports = function factory (
 
     // Log end-of-connection events.
     connection
-    .once('end', function () {
-      connectionLog.info({event: 'end'})
-    })
-    .once('error', /* istanbul ignore next */ function (error) {
-      connectionLog.error(error)
-    })
-    .once('close', function (error) {
-      connectionLog.info({
-        event: 'close',
-        error: error
+      .once('end', function () {
+        connectionLog.info({event: 'end'})
       })
-    })
+      .once('error', /* istanbul ignore next */ function (error) {
+        connectionLog.error(error)
+      })
+      .once('close', function (error) {
+        connectionLog.info({
+          event: 'close',
+          error: error
+        })
+      })
 
     // Send newline-delimited JSON back and forth across the connection.
     var json = duplexJSON(connection)
-    .once('error', function () {
-      disconnect('invalid JSON')
-    })
+      .once('error', function () {
+        disconnect('invalid JSON')
+      })
 
     // Whether the client is currently reading the log. When reading, an
     // object recording information about the state of the read.
@@ -70,40 +70,40 @@ module.exports = function factory (
       var writeLog = connectionLog.child({hash: hash})
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream({key: hashToPath(hash)})
-      .once('error', /* istanbul ignore next */ function (error) {
-        writeLog.error(error)
-        json.write({
-          id: message.id,
-          error: error.toString()
-        }, done)
-      })
-      .once('finish', function appendToLog () {
-        // Append an entry to the log with the hash of the entry.
-        writeLog.info({
-          event: 'appending',
-          hash: hash
+        .once('error', /* istanbul ignore next */ function (error) {
+          writeLog.error(error)
+          json.write({
+            id: message.id,
+            error: error.toString()
+          }, done)
         })
-        dataLog.append(hash, function (error, index) {
-          /* istanbul ignore if */
-          if (error) {
-            writeLog.error(error)
-            json.write({
-              id: message.id,
-              error: error.toString()
-            }, done)
-          } else {
-            writeLog.info({event: 'wrote'})
-            // Send confirmation.
-            json.write({
-              id: message.id,
-              index: index
-            }, done)
-            // Emit an event.
-            emitter.emit('entry', index, message.entry, connection)
-          }
+        .once('finish', function appendToLog () {
+          // Append an entry to the log with the hash of the entry.
+          writeLog.info({
+            event: 'appending',
+            hash: hash
+          })
+          dataLog.append(hash, function (error, index) {
+            /* istanbul ignore if */
+            if (error) {
+              writeLog.error(error)
+              json.write({
+                id: message.id,
+                error: error.toString()
+              }, done)
+            } else {
+              writeLog.info({event: 'wrote'})
+              // Send confirmation.
+              json.write({
+                id: message.id,
+                index: index
+              }, done)
+              // Emit an event.
+              emitter.emit('entry', index, message.entry, connection)
+            }
+          })
         })
-      })
-      .end(content)
+        .end(content)
     })
 
     // Route client messages to appropriate handlers.
@@ -174,13 +174,13 @@ module.exports = function factory (
       var transform = through2.obj(function (record, _, done) {
         highestIndex = record.index
         blobs.createReadStream({key: hashToPath(record.entry)})
-        .once('error', onFatalError)
-        .pipe(concatStream(function (json) {
-          done(null, {
-            index: record.index,
-            entry: JSON.parse(json)
-          })
-        }))
+          .once('error', onFatalError)
+          .pipe(concatStream(function (json) {
+            done(null, {
+              index: record.index,
+              entry: JSON.parse(json)
+            })
+          }))
       })
 
       // Push references so the streams so they can be unpiped and
@@ -190,10 +190,10 @@ module.exports = function factory (
 
       // Build the data pipeline.
       readStream
-      .once('error', onFatalError)
-      .pipe(transform)
-      .once('error', onFatalError)
-      .pipe(json, {end: false})
+        .once('error', onFatalError)
+        .pipe(transform)
+        .once('error', onFatalError)
+        .pipe(json, {end: false})
 
       endOfStream(transform, function (error) {
         /* istanbul ignore if */
@@ -223,10 +223,10 @@ module.exports = function factory (
       function onAppend (index, entry, fromConnection) {
         // Do not send entries from earlier in the log than requested.
         if (index < reading.from) {
-          return
+          // pass
         // Do not send entries later than requested.
         } else if (index > reading.through) {
-          return
+          // pass
         // Phase 3: Forward entries as they are appended.
         } else if (reading.doneStreaming) {
           connectionLog.info({
