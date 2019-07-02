@@ -12,7 +12,7 @@
     "end-of-stream": "^1.1.0",
     "fs-blob-store": "^5.2.1",
     "json-stable-stringify": "^1.0.1",
-    "level-simple-log": "^2.0.0",
+    "level-simple-log": "^3.0.0",
     "leveldown": "^5.1.1",
     "levelup": "^4.1.0",
     "memdown": "^4.1.0",
