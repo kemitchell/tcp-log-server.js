@@ -7,7 +7,7 @@
   "dependencies": {
     "abstract-blob-store": "^3.2.0",
     "async.queue": "^0.5.2",
-    "concat-stream": "^1.5.1",
+    "concat-stream": "^2.0.0",
     "duplex-json-stream": "^1.0.1",
     "end-of-stream": "^1.1.0",
     "fs-blob-store": "^5.2.1",
