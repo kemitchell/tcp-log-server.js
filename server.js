@@ -6,8 +6,16 @@ var PORT = parseInt(process.env.PORT) || 8089
 
 var crypto = require('crypto')
 var level = LEVELDOWN === 'memory'
+<<<<<<< Updated upstream
  ? require('levelup')('tcp-log-server', {db: require('memdown')})
  : require('levelup')(LEVELDOWN, {db: require('leveldown')})
+||||||| merged common ancestors
+  ? require('levelup')('tcp-log-server', { db: require('memdown') })
+  : require('levelup')(LEVELDOWN, { db: require('leveldown') })
+=======
+  ? require('levelup')(require('encoding-down')(require('memdown')()))
+  : require('levelup')(require('leveldown')(LEVELDOWN))
+>>>>>>> Stashed changes
 var pino = require('pino')()
 var handler = require('./')(
   pino,
