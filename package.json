@@ -19,7 +19,7 @@
     "pino": "^5.12.6",
     "stream-set": "^1.1.0",
     "through2": "^3.0.1",
-    "uuid": "^2.0.2"
+    "uuid": "^3.3.2"
   },
   "devDependencies": {
     "deep-equal": "^1.0.1",
