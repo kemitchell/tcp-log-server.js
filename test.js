@@ -18,20 +18,20 @@ var sha256 = function (argument) {
 
 tape('confirm writes', function (test) {
   simpleTest({
-    send: [{entry: {a: 1}, id: 'abc123'}],
-    receive: [{id: 'abc123', index: 1}]
+    send: [{ entry: { a: 1 }, id: 'abc123' }],
+    receive: [{ id: 'abc123', index: 1 }]
   }, test)
 })
 
 tape.skip('duplicate read', function (test) {
   simpleTest({
     send: [
-      {from: 1, read: 1},
-      {from: 1, read: 1}
+      { from: 1, read: 1 },
+      { from: 1, read: 1 }
     ],
     receive: [
-      {error: 'already reading'},
-      {current: true}
+      { error: 'already reading' },
+      { current: true }
     ]
   }, test)
 })
@@ -39,14 +39,14 @@ tape.skip('duplicate read', function (test) {
 tape('simple sync', function (test) {
   simpleTest({
     send: [
-      {entry: {a: 1}, id: 'abc123'},
-      {from: 1, read: 1}
+      { entry: { a: 1 }, id: 'abc123' },
+      { from: 1, read: 1 }
     ],
     receive: [
-      {current: true},
-      {id: 'abc123', index: 1},
-      {index: 1, entry: {a: 1}},
-      {head: 1}
+      { current: true },
+      { id: 'abc123', index: 1 },
+      { index: 1, entry: { a: 1 } },
+      { head: 1 }
     ]
   }, test)
 })
@@ -55,12 +55,12 @@ tape('writes before and after read', function (test) {
   testConnections(1, function (client, server) {
     var messages = []
     var expected = [
-      {current: true},
-      {id: 'first', index: 1},
-      {index: 1, entry: {a: 1}},
-      {id: 'second', index: 2},
-      {index: 2, entry: {b: 2}},
-      {head: 2}
+      { current: true },
+      { id: 'first', index: 1 },
+      { index: 1, entry: { a: 1 } },
+      { id: 'second', index: 2 },
+      { index: 2, entry: { b: 2 } },
+      { head: 2 }
     ]
     client.on('data', function (data) {
       messages.push(data)
@@ -71,26 +71,26 @@ tape('writes before and after read', function (test) {
         test.end()
       }
     })
-    client.write({entry: {a: 1}, id: 'first'})
-    client.write({from: 1, read: 2})
-    client.write({entry: {b: 2}, id: 'second'})
+    client.write({ entry: { a: 1 }, id: 'first' })
+    client.write({ from: 1, read: 2 })
+    client.write({ entry: { b: 2 }, id: 'second' })
   })
 })
 
 tape('writes before and after read', function (test) {
   simpleTest({
     send: [
-      {entry: {a: 1}, id: 'first write'},
-      {from: 1, read: 2},
-      {entry: {b: 2}, id: 'second write'}
+      { entry: { a: 1 }, id: 'first write' },
+      { from: 1, read: 2 },
+      { entry: { b: 2 }, id: 'second write' }
     ],
     receive: [
-      {current: true},
-      {id: 'first write', index: 1},
-      {index: 1, entry: {a: 1}},
-      {id: 'second write', index: 2},
-      {index: 2, entry: {b: 2}},
-      {head: 2}
+      { current: true },
+      { id: 'first write', index: 1 },
+      { index: 1, entry: { a: 1 } },
+      { id: 'second write', index: 2 },
+      { index: 2, entry: { b: 2 } },
+      { head: 2 }
     ]
   }, test)
 })
@@ -120,18 +120,18 @@ tape('buffering', function (test) {
     // a long-running LevelUP read stream.
     var counter = 0
     for (; counter < 100; counter++) {
-      writing.write({entry: {i: counter}, id: counter.toString()})
+      writing.write({ entry: { i: counter }, id: counter.toString() })
     }
     // Wait for the log server to write the entries to its LevelUP.
     setTimeout(function () {
       // Request a read.
-      reading.write({from: 1, read: 200})
+      reading.write({ from: 1, read: 200 })
       setImmediate(function () {
         // Append another 100 entries. Some of these should reach the
         // server while it is streaming from LevelUP to respond to the
         // reading client. That triggers buffering.
         for (; counter < 200; counter++) {
-          writing.write({entry: {i: counter}, id: counter.toString()})
+          writing.write({ entry: { i: counter }, id: counter.toString() })
         }
       })
     }, 250)
@@ -160,18 +160,18 @@ tape('buffering limited pull', function (test) {
     // a long-running LevelUP read stream.
     var counter = 0
     for (; counter < 100; counter++) {
-      writing.write({entry: {i: counter}, id: counter.toString()})
+      writing.write({ entry: { i: counter }, id: counter.toString() })
     }
     // Wait for the log server to write the entries to its LevelUP.
     setTimeout(function () {
       // Request a read.
-      reading.write({from: 1, read: 50})
+      reading.write({ from: 1, read: 50 })
       setImmediate(function () {
         // Append another 100 entries. Some of these should reach the
         // server while it is streaming from LevelUP to respond to the
         // reading client. That triggers buffering.
         for (; counter < 200; counter++) {
-          writing.write({entry: {i: counter}, id: counter.toString()})
+          writing.write({ entry: { i: counter }, id: counter.toString() })
         }
       })
     }, 250)
@@ -182,8 +182,8 @@ tape('two clients', function (test) {
   testConnections(2, function (clients, server) {
     var ana = clients[0]
     var bob = clients[1]
-    var anaWasHere = {message: 'Ana was here.'}
-    var bobWasHere = {message: 'Bob was here.'}
+    var anaWasHere = { message: 'Ana was here.' }
+    var bobWasHere = { message: 'Bob was here.' }
 
     var anaFinished = false
     var bobFinished = false
@@ -209,16 +209,16 @@ tape('two clients', function (test) {
         finish()
       }
     })
-    ana.write({from: 1, read: 2})
-    bob.write({from: 1, read: 2})
-    ana.write({entry: anaWasHere, id: 'first'})
-    bob.write({entry: bobWasHere, id: 'second'})
+    ana.write({ from: 1, read: 2 })
+    bob.write({ from: 1, read: 2 })
+    ana.write({ entry: anaWasHere, id: 'first' })
+    bob.write({ entry: bobWasHere, id: 'second' })
   })
 })
 
 tape('old entry', function (test) {
   testConnections(1, function (client, server) {
-    var entry = {a: 1}
+    var entry = { a: 1 }
     client.on('data', function (data) {
       if (deepEqual(data.entry, entry)) {
         test.pass('receives old entry')
@@ -227,9 +227,9 @@ tape('old entry', function (test) {
         test.end()
       }
     })
-    client.write({entry: entry, id: 'first'})
+    client.write({ entry: entry, id: 'first' })
     setTimeout(function () {
-      client.write({from: 1, read: 1})
+      client.write({ from: 1, read: 1 })
     }, 25)
   })
 })
@@ -238,7 +238,7 @@ tape('read from future index', function (test) {
   testConnections(2, function (clients, server) {
     var readingClient = clients[0]
     var writingClient = clients[1]
-    var entries = [{a: 1}, {b: 2}]
+    var entries = [{ a: 1 }, { b: 2 }]
     readingClient.on('data', function (data) {
       /* istanbul ignore if */
       if (deepEqual(data.entry, entries[0])) {
@@ -250,9 +250,9 @@ tape('read from future index', function (test) {
         test.end()
       }
     })
-    readingClient.write({from: 2, read: 1})
-    writingClient.write({entry: entries[0], id: 'first'})
-    writingClient.write({entry: entries[1], id: 'second'})
+    readingClient.write({ from: 2, read: 1 })
+    writingClient.write({ entry: entries[0], id: 'first' })
+    writingClient.write({ entry: entries[1], id: 'second' })
     writingClient.end()
   })
 })
@@ -261,7 +261,7 @@ tape('read from later', function (test) {
   testConnections(2, function (clients, server) {
     var readingClient = clients[0]
     var writingClient = clients[1]
-    var entries = [{a: 1}, {b: 2}, {c: 3}]
+    var entries = [{ a: 1 }, { b: 2 }, { c: 3 }]
     var received = []
     readingClient.on('data', function (data) {
       if ('entry' in data) {
@@ -276,9 +276,9 @@ tape('read from later', function (test) {
         }
       }
     })
-    readingClient.write({from: 2, read: 2})
+    readingClient.write({ from: 2, read: 2 })
     entries.forEach(function (entry, index) {
-      writingClient.write({entry: entry, id: '' + index})
+      writingClient.write({ entry: entry, id: '' + index })
     })
     writingClient.end()
   })
@@ -288,14 +288,14 @@ tape('current signal', function (test) {
   testConnections(2, function (clients, server) {
     var readingClient = clients[0]
     var writingClient = clients[1]
-    var entries = [{a: 1}, {b: 2}, {c: 3}]
+    var entries = [{ a: 1 }, { b: 2 }, { c: 3 }]
     var messages = []
     var expected = [
-      {index: 1, entry: entries[0]},
-      {index: 2, entry: entries[1]},
-      {current: true},
-      {index: 3, entry: entries[2]},
-      {head: 3}
+      { index: 1, entry: entries[0] },
+      { index: 2, entry: entries[1] },
+      { current: true },
+      { index: 3, entry: entries[2] },
+      { head: 3 }
     ]
     readingClient.on('data', function (data) {
       messages.push(data)
@@ -306,12 +306,12 @@ tape('current signal', function (test) {
         test.end()
       }
     })
-    writingClient.write({entry: entries[0], id: 'first'})
-    writingClient.write({entry: entries[1], id: 'second'})
+    writingClient.write({ entry: entries[0], id: 'first' })
+    writingClient.write({ entry: entries[1], id: 'second' })
     setTimeout(function () {
-      readingClient.write({from: 1, read: entries.length})
+      readingClient.write({ from: 1, read: entries.length })
       setTimeout(function () {
-        writingClient.end({entry: entries[2], id: 'third'})
+        writingClient.end({ entry: entries[2], id: 'third' })
       }, 50)
     }, 50)
   })
@@ -321,16 +321,16 @@ tape('successive reads', function (test) {
   testConnections(2, function (clients, server) {
     var readingClient = clients[0]
     var writingClient = clients[1]
-    var entries = [{a: 1}, {b: 2}, {c: 3}]
+    var entries = [{ a: 1 }, { b: 2 }, { c: 3 }]
     var received = []
     var expected = [
-      {index: 1, entry: entries[0]},
-      {head: 3},
-      {index: 2, entry: entries[1]},
-      {head: 3},
-      {index: 3, entry: entries[2]},
-      {head: 3},
-      {current: true}
+      { index: 1, entry: entries[0] },
+      { head: 3 },
+      { index: 2, entry: entries[1] },
+      { head: 3 },
+      { index: 3, entry: entries[2] },
+      { head: 3 },
+      { current: true }
     ]
     var lastSeen = 0
     readingClient.on('data', function handler (data) {
@@ -338,7 +338,7 @@ tape('successive reads', function (test) {
       if (data.index) {
         lastSeen = data.index
       } else if (data.head) {
-        readingClient.write({from: lastSeen + 1, read: 1})
+        readingClient.write({ from: lastSeen + 1, read: 1 })
       }
       if (received.length === expected.length) {
         this.removeAllListeners()
@@ -350,10 +350,10 @@ tape('successive reads', function (test) {
       }
     })
     entries.forEach(function (entry, index) {
-      writingClient.write({entry: entry, id: String(index)})
+      writingClient.write({ entry: entry, id: String(index) })
     })
     setTimeout(function () {
-      readingClient.write({from: 1, read: 1})
+      readingClient.write({ from: 1, read: 1 })
     }, 100)
   })
 })
@@ -361,12 +361,12 @@ tape('successive reads', function (test) {
 tape('invalid message', function (test) {
   testConnections(1, function (client, server) {
     client.on('data', function (data) {
-      test.deepEqual(data, {error: 'invalid message'})
+      test.deepEqual(data, { error: 'invalid message' })
       client.end()
       server.close()
       test.end()
     })
-    client.write({type: 'nonsense'})
+    client.write({ type: 'nonsense' })
   })
 })
 
@@ -386,7 +386,7 @@ tape('invalid json during read', function (test) {
   testConnections(1, function (client, server, port) {
     client.socket
       .once('connect', function () {
-        client.write({from: 1, read: 1})
+        client.write({ from: 1, read: 1 })
         client.socket.write('not JSON\n')
       })
       .once('close', function () {

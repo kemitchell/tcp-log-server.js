@@ -15,7 +15,7 @@ module.exports = function factory (
     connection.setKeepAlive(true)
 
     // Set up a child log for this connection, identified by UUID.
-    var connectionLog = serverLog.child({connection: uuid()})
+    var connectionLog = serverLog.child({ connection: uuid() })
     connectionLog.info({
       event: 'connected',
       address: connection.remoteAddress,
@@ -25,7 +25,7 @@ module.exports = function factory (
     // Log end-of-connection events.
     connection
       .once('end', function () {
-        connectionLog.info({event: 'end'})
+        connectionLog.info({ event: 'end' })
       })
       .once('error', /* istanbul ignore next */ function (error) {
         connectionLog.error(error)
@@ -67,9 +67,9 @@ module.exports = function factory (
       var content = stringify(message.entry)
       var hash = hashFunction(content)
       // Create a child log for this entry write.
-      var writeLog = connectionLog.child({hash: hash})
+      var writeLog = connectionLog.child({ hash: hash })
       // Append the entry payload in the blob store, by hash.
-      blobs.createWriteStream({key: hashToPath(hash)})
+      blobs.createWriteStream({ key: hashToPath(hash) })
         .once('error', /* istanbul ignore next */ function (error) {
           writeLog.error(error)
           json.write({
@@ -92,7 +92,7 @@ module.exports = function factory (
                 error: error.toString()
               }, done)
             } else {
-              writeLog.info({event: 'wrote'})
+              writeLog.info({ event: 'wrote' })
               // Send confirmation.
               json.write({
                 id: message.id,
@@ -108,11 +108,11 @@ module.exports = function factory (
 
     // Route client messages to appropriate handlers.
     json.on('data', function routeMessage (message) {
-      connectionLog.info({event: 'message', message: message})
+      connectionLog.info({ event: 'message', message: message })
       if (isReadMessage(message)) {
         if (reading) {
           connectionLog.warn('already reading')
-          json.write({error: 'already reading'})
+          json.write({ error: 'already reading' })
         } else {
           onReadMessage(message)
         }
@@ -123,7 +123,7 @@ module.exports = function factory (
           event: 'invalid',
           message: message
         })
-        json.write({error: 'invalid message'})
+        json.write({ error: 'invalid message' })
       }
     })
 
@@ -157,8 +157,8 @@ module.exports = function factory (
       })
 
       // Phase 1: Stream entries from the LevelUP store.
-      var streamLog = connectionLog.child({phase: 'stream'})
-      streamLog.info({event: 'create'})
+      var streamLog = connectionLog.child({ phase: 'stream' })
+      streamLog.info({ event: 'create' })
 
       var readStream = dataLog.createStream({
         from: message.from - 1,
@@ -173,7 +173,7 @@ module.exports = function factory (
       // the blog store and forward a complete entry object.
       var transform = through2.obj(function (record, _, done) {
         highestIndex = record.index
-        blobs.createReadStream({key: hashToPath(record.entry)})
+        blobs.createReadStream({ key: hashToPath(record.entry) })
           .once('error', onFatalError)
           .pipe(concatStream(function (json) {
             done(null, {
@@ -193,7 +193,7 @@ module.exports = function factory (
         .once('error', onFatalError)
         .pipe(transform)
         .once('error', onFatalError)
-        .pipe(json, {end: false})
+        .pipe(json, { end: false })
 
       endOfStream(transform, function (error) {
         /* istanbul ignore if */
@@ -212,7 +212,7 @@ module.exports = function factory (
           if (sentAllRequested()) {
             finish()
           } else {
-            json.write({current: true})
+            json.write({ current: true })
             // Set flags to start Phase 3.
             reading.doneStreaming = true
             reading.buffer = null
@@ -264,7 +264,7 @@ module.exports = function factory (
             streamLog.error(error)
             disconnect(error.toString())
           } else {
-            json.write({head: head})
+            json.write({ head: head })
             reading = false
           }
         })
@@ -297,8 +297,8 @@ module.exports = function factory (
     }
 
     function disconnect (error) {
-      connectionLog.error({error: error})
-      json.write({error: error})
+      connectionLog.error({ error: error })
+      json.write({ error: error })
       if (reading) {
         destroyStreams()
         writeQueue.kill()
@@ -333,8 +333,8 @@ function has (argument, key, predicate) {
   return (
     argument.hasOwnProperty(key) &&
     typeof predicate === 'function'
-    ? predicate(argument[key])
-    : argument[key] === predicate
+      ? predicate(argument[key])
+      : argument[key] === predicate
   )
 }
 
