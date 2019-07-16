@@ -331,7 +331,7 @@ function isWriteMessage (argument) {
 
 function has (argument, key, predicate) {
   return (
-    argument.hasOwnProperty(key) &&
+    Object.prototype.hasOwnProperty.call(argument, key) &&
     typeof predicate === 'function'
       ? predicate(argument[key])
       : argument[key] === predicate
