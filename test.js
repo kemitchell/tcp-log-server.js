@@ -1,13 +1,11 @@
-var SimpleLog = require('level-simple-log')
 var crypto = require('crypto')
 var deepEqual = require('deep-equal')
 var devnull = require('dev-null')
 var duplexJSON = require('duplex-json-stream')
-var encode = require('encoding-down')
-var levelup = require('levelup')
-var memdown = require('memdown')
+var fs = require('fs')
 var net = require('net')
 var pino = require('pino')
+var rimraf = require('rimraf')
 var tape = require('tape')
 
 var sha256 = function (argument) {
@@ -36,7 +34,7 @@ tape.skip('duplicate read', function (test) {
   }, test)
 })
 
-tape('simple sync', function (test) {
+tape.only('simple sync', function (test) {
   simpleTest({
     send: [
       { entry: { a: 1 }, id: 'abc123' },
@@ -424,35 +422,30 @@ function simpleTest (options, test) {
 }
 
 function testConnections (numberOfClients, callback) {
-  // Use an in-memory storage back-end.
-  var level = levelup(encode(memdown()))
-  var dataLog = SimpleLog(level)
-  // Use an in-memory blob store.
-  var blobs = require('abstract-blob-store')()
-  // Pipe log messages to nowhere.
-  var serverLog = pino({}, devnull())
-  var emitter = new (require('events').EventEmitter)()
-  var handler = require('./')(
-    serverLog, dataLog, blobs, emitter, sha256
-  )
-  var server = net.createServer()
-    .on('connection', handler)
-    .once('close', function () {
-      level.close()
-    })
-    .listen(0, function () {
-      var serverPort = this.address().port
-      var clients = []
-      for (var n = 0; n < numberOfClients; n++) {
-        var client = net.connect(serverPort)
-        var clientJSON = duplexJSON(client)
-        clientJSON.socket = client
-        clients.push(clientJSON)
-      }
-      if (numberOfClients === 1) {
-        callback(clients[0], server, serverPort)
-      } else {
-        callback(clients, server, serverPort)
-      }
-    })
+  fs.mkdtemp('tcp-log-server', function (_, directory) {
+    var log = pino({}, devnull())
+    log = pino()
+    var emitter = new (require('events').EventEmitter)()
+    var handler = require('./')(log, directory, emitter, sha256)
+    var server = net.createServer()
+      .on('connection', handler)
+      .once('close', function () {
+        rimraf.sync(directory)
+      })
+      .listen(0, function () {
+        var serverPort = this.address().port
+        var clients = []
+        for (var n = 0; n < numberOfClients; n++) {
+          var client = net.connect(serverPort)
+          var clientJSON = duplexJSON(client)
+          clientJSON.socket = client
+          clients.push(clientJSON)
+        }
+        if (numberOfClients === 1) {
+          callback(clients[0], server, serverPort)
+        } else {
+          callback(clients, server, serverPort)
+        }
+      })
+  })
 }

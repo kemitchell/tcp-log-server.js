@@ -1,21 +1,54 @@
 var asyncQueue = require('async.queue')
-var concatStream = require('concat-stream')
 var duplexJSON = require('duplex-json-stream')
 var endOfStream = require('end-of-stream')
+var fs = require('fs')
+var mkdirp = require('mkdirp')
+var path = require('path')
+var runSeries = require('run-series')
+var split2 = require('split2')
 var stringify = require('json-stable-stringify')
 var through2 = require('through2')
 var uuid = require('uuid').v4
 
-module.exports = function factory (
-  serverLog, dataLog, blobs, emitter, hashFunction
-) {
+module.exports = function (log, directory, emitter, hashFunction) {
+  var logFile = path.join(directory, 'log')
+  var entriesPath = path.join(directory, 'entries')
+
+  // Compute the length of a log line.
+  var logLineBytes = Buffer.from(hashFunction('') + '\n').length
+
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
     // Enable keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
 
+    // Read the initial length of the log.
+    var head
+    fs.stat(logFile, function (error, stats) {
+      /* istanbul ignore if */
+      if (error) {
+        if (error.code === 'ENOENT') {
+          head = 0
+        } else {
+          log.error(error)
+          return disconnect(error.toString())
+        }
+      } else {
+        head = stats.size / logLineBytes
+      }
+      log.info({ head: head })
+    })
+
+    // Create the subdirectory for entry files.
+    mkdirp(entriesPath, function (error) {
+      if (error) {
+        log.error(error)
+        disconnect(error.toString())
+      }
+    })
+
     // Set up a child log for this connection, identified by UUID.
-    var connectionLog = serverLog.child({ connection: uuid() })
+    var connectionLog = log.child({ connection: uuid() })
     connectionLog.info({
       event: 'connected',
       address: connection.remoteAddress,
@@ -47,7 +80,7 @@ module.exports = function factory (
     // object recording information about the state of the read.
     //
     // - doneStreaming (Boolean): Whether the server is done streaming
-    //   old entries from LevelUP.
+    //   old entries.
     //
     // - buffer (Array): Contains entries made after the server
     //   started streaming old entries, but before it finished.
@@ -68,42 +101,37 @@ module.exports = function factory (
       var hash = hashFunction(content)
       // Create a child log for this entry write.
       var writeLog = connectionLog.child({ hash: hash })
-      // Append the entry payload in the blob store, by hash.
-      blobs.createWriteStream({ key: hashToPath(hash) })
-        .once('error', /* istanbul ignore next */ function (error) {
+      var index
+      runSeries([
+        function writeEntry (done) {
+          fs.writeFile(
+            entryPath(hash), content, { flag: 'wx' },
+            done
+          )
+        },
+        function appendHashToLog (done) {
+          writeLog.info({ event: 'appending', hash: hash })
+          var line = hash + '\n'
+          fs.writeFile(logFile, line, { flag: 'a' }, done)
+        }
+      ], function (error) {
+        if (error) {
           writeLog.error(error)
-          json.write({
+          return json.write({
             id: message.id,
             error: error.toString()
-          }, done)
-        })
-        .once('finish', function appendToLog () {
-          // Append an entry to the log with the hash of the entry.
-          writeLog.info({
-            event: 'appending',
-            hash: hash
           })
-          dataLog.append(hash, function (error, index) {
-            /* istanbul ignore if */
-            if (error) {
-              writeLog.error(error)
-              json.write({
-                id: message.id,
-                error: error.toString()
-              }, done)
-            } else {
-              writeLog.info({ event: 'wrote' })
-              // Send confirmation.
-              json.write({
-                id: message.id,
-                index: index
-              }, done)
-              // Emit an event.
-              emitter.emit('entry', index, message.entry, connection)
-            }
-          })
-        })
-        .end(content)
+        }
+        index = ++head
+        writeLog.info({ event: 'wrote' })
+        // Send confirmation.
+        json.write({
+          id: message.id,
+          index: index
+        }, done)
+        // Emit an event.
+        emitter.emit('entry', index, message.entry, connection)
+      })
     })
 
     // Route client messages to appropriate handlers.
@@ -131,8 +159,7 @@ module.exports = function factory (
     function onReadMessage (message) {
       // A read advances, in order, through three phases:
       //
-      // Phase 1. Stream entries from a snapshot of the LevelUP store
-      //          created by `.createStream`, fetching their content
+      // Phase 1. Stream entries from the log file, fetching their content
       //          from the blob store.  Buffer entries appended while
       //          streaming.
       //
@@ -156,40 +183,45 @@ module.exports = function factory (
         emitter.addListener('entry', onAppend)
       })
 
-      // Phase 1: Stream entries from the LevelUP store.
+      // Phase 1: Stream entries from the log file.
       var streamLog = connectionLog.child({ phase: 'stream' })
       streamLog.info({ event: 'create' })
 
-      var readStream = dataLog.createStream({
-        from: message.from - 1,
-        limit: message.read
+      var readStream = fs.createReadStream(logFile, {
+        encoding: 'utf8',
+        start: logLineBytes * (message.from - 1),
+        end: logLineBytes * message.read
       })
+
+      var split = split2()
 
       // Track the highest index seen, so we know when we have sent
       // all the entries requested.
-      var highestIndex = 0
+      var highestIndex = message.from - 1
 
-      // For each index-hash pair, read the corresponding content from
-      // the blog store and forward a complete entry object.
-      var transform = through2.obj(function (record, _, done) {
-        highestIndex = record.index
-        blobs.createReadStream({ key: hashToPath(record.entry) })
-          .once('error', onFatalError)
-          .pipe(concatStream(function (json) {
-            done(null, {
-              index: record.index,
-              entry: JSON.parse(json)
-            })
-          }))
+      // For each hash, read the corresponding entry and forward
+      // a complete entry object.
+      var transform = through2.obj(function (hash, _, done) {
+        highestIndex++
+        fs.readFile(entryPath(hash), function (error, json) {
+          if (error) return onFatalError(error)
+          done(null, {
+            index: highestIndex,
+            entry: JSON.parse(json)
+          })
+        })
       })
 
       // Push references so the streams so they can be unpiped and
       // destroyed later.
       reading.streams.push(readStream)
+      reading.streams.push(split)
       reading.streams.push(transform)
 
       // Build the data pipeline.
       readStream
+        .once('error', onFatalError)
+        .pipe(split)
         .once('error', onFatalError)
         .pipe(transform)
         .once('error', onFatalError)
@@ -258,16 +290,8 @@ module.exports = function factory (
       function finish () {
         destroyStreams()
         emitter.removeListener('entry', onAppend)
-        dataLog.head(function (error, head) {
-          /* istanbul ignore if */
-          if (error) {
-            streamLog.error(error)
-            disconnect(error.toString())
-          } else {
-            json.write({ head: head })
-            reading = false
-          }
-        })
+        json.write({ head: head })
+        reading = false
       }
 
       function sendEntry (index, entry) {
@@ -307,6 +331,10 @@ module.exports = function factory (
       connection.destroy()
     }
   }
+
+  function entryPath (hash) {
+    return path.join(entriesPath, hash + '.json')
+  }
 }
 
 function isReadMessage (argument) {
@@ -340,8 +368,4 @@ function has (argument, key, predicate) {
 
 function isPositiveInteger (argument) {
   return Number.isInteger(argument) && argument > 0
-}
-
-function hashToPath (hash) {
-  return hash.slice(0, 2) + '/' + hash.slice(2)
 }
