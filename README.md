@@ -31,10 +31,10 @@ Configure `tcp-log-server` with environment variables:
 
 ## Node.js
 
-The package exports a factory function.  Given a [pino] log, a
-file path, an [abstract-blob-store], an `EventEmitter`, and a hash
-function, it returns a TCP connection handler function suitable for
-`net.createServer(handler)`.
+The package exports a factory function.  Given a [pino] log, a file
+path, an [abstract-blob-store], and an `EventEmitter`, it returns a TCP
+connection handler function suitable for `net.createServer(handler)`.
+You may also provide a hash function and hash length.
 
 [abstract-blob-store]: https://npmjs.com/packages/abstract-blob-store
 

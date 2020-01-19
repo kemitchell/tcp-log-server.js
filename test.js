@@ -1,4 +1,3 @@
-var crypto = require('crypto')
 var deepEqual = require('deep-equal')
 var devnull = require('dev-null')
 var duplexJSON = require('duplex-json-stream')
@@ -427,7 +426,7 @@ function testConnections (numberOfClients, callback) {
   // Pipe log messages to nowhere.
   var log = pino({}, devnull())
   var emitter = new (require('events').EventEmitter)()
-  var handler = require('./')(log, file, blobs, emitter)
+  var handler = require('./')({ log, file, blobs, emitter })
   var server = net.createServer()
     .on('connection', handler)
     .once('close', function () {

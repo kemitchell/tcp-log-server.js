@@ -12,11 +12,13 @@ var uuid = require('uuid').v4
 
 var lock = Lock()
 
-module.exports = function factory (
-  log, file, blobs, emitter, hashFunction, hashBytes
-) {
-  if (!hashFunction) hashFunction = sha256
-  if (!hashBytes) hashBytes = 64
+module.exports = function factory (options) {
+  var log = options.log
+  var file = options.file
+  var blobs = options.blobs
+  var hashFunction = options.hashFunction || sha256
+  var emitter = options.emitter
+  var hashBytes = options.hashBytes || 64
   var lineBytes = hashBytes + 1
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.

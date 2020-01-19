@@ -4,22 +4,15 @@ var FILE = process.env.FILE || ('.' + NAME + '.file')
 var BLOBS = process.env.BLOBS || ('.' + NAME + '.blobs')
 var PORT = parseInt(process.env.PORT) || 8089
 
-var crypto = require('crypto')
 var pino = require('pino')()
-var handler = require('./')(
-  pino,
-  FILE,
-  BLOBS === 'memory'
+var handler = require('./')({
+  pino: pino,
+  file: FILE,
+  blogs: BLOBS === 'memory'
     ? require('abstract-blob-store')()
     : require('fs-blob-store')(BLOBS),
-  new (require('events').EventEmitter)(),
-  function (argument) {
-    return crypto.createHash('sha256')
-      .update(argument)
-      .digest('hex')
-  },
-  64
-)
+  emitter: new (require('events').EventEmitter)()
+})
 
 var sockets = require('stream-set')()
 var server = require('net').createServer()
