@@ -78,7 +78,7 @@ module.exports = (options) => {
       const content = stringify(message.entry)
       const hash = hashFunction(content)
       // Create a child log for this entry write.
-      const writeLog = connectionLog.child({ hash: hash })
+      const writeLog = connectionLog.child({ hash })
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream(hash)
         .once('error', /* istanbul ignore next */ (error) => {
@@ -92,10 +92,7 @@ module.exports = (options) => {
           lock(file, (unlock) => {
             done = unlock(done)
             // Append an entry to the log with the hash of the entry.
-            writeLog.info({
-              event: 'appending',
-              hash: hash
-            })
+            writeLog.info({ event: 'appending', hash })
             fs.writeFile(file, hash + '\n', { flag: 'a' }, (error) => {
               /* istanbul ignore if */
               if (error) {
@@ -109,10 +106,7 @@ module.exports = (options) => {
               readHead((error, index) => {
                 if (error) return done(error)
                 // Send confirmation.
-                json.write({
-                  id: message.id,
-                  index: index
-                }, done)
+                json.write({ id: message.id, index }, done)
                 // Emit an event.
                 emitter.emit('entry', index, message.entry, connection)
               })
@@ -124,7 +118,7 @@ module.exports = (options) => {
 
     // Route client messages to appropriate handlers.
     json.on('data', (message) => {
-      connectionLog.info({ event: 'message', message: message })
+      connectionLog.info({ event: 'message', message })
       if (isReadMessage(message)) {
         if (reading) {
           connectionLog.warn('already reading')
@@ -134,10 +128,7 @@ module.exports = (options) => {
       } else if (isWriteMessage(message)) {
         return writeQueue.push(message)
       }
-      connectionLog.warn({
-        event: 'invalid',
-        message: message
-      })
+      connectionLog.warn({ event: 'invalid', message })
       json.write({ error: 'invalid message' })
     })
 
@@ -176,10 +167,7 @@ module.exports = (options) => {
 
       const start = (message.from - 1) * lineBytes
       const end = start + (message.read * lineBytes) - 1
-      const readStream = fs.createReadStream(file, {
-        start: start,
-        end: end
-      })
+      const readStream = fs.createReadStream(file, { start, end })
       const split = split2('\n', { trailing: false })
 
       // Track the highest index seen, so we know when we have sent
@@ -241,24 +229,15 @@ module.exports = (options) => {
         if (index > reading.through) return // pass
         // Phase 3: Forward entries as they are appended.
         if (reading.doneStreaming) {
-          connectionLog.info({
-            event: 'forward',
-            index: index
-          })
+          connectionLog.info({ event: 'forward', index })
           sendEntry(index, entry)
           highestIndex = index
           if (sentAllRequested()) finish()
           return
         }
         // Buffer for Phase 2.
-        connectionLog.info({
-          event: 'buffer',
-          index: index
-        })
-        reading.buffer.push({
-          index: index,
-          entry: entry
-        })
+        connectionLog.info({ event: 'buffer', index })
+        reading.buffer.push({ index, entry })
       }
 
       function sentAllRequested () {
@@ -274,20 +253,14 @@ module.exports = (options) => {
             streamLog.error(error)
             return disconnect(error.toString())
           }
-          json.write({ head: head })
+          json.write({ head })
           reading = false
         })
       }
 
       function sendEntry (index, entry) {
-        json.write({
-          index: index,
-          entry: entry
-        })
-        connectionLog.info({
-          event: 'sent',
-          index: index
-        })
+        json.write({ index, entry })
+        connectionLog.info({ event: 'sent', index })
       }
 
       /* istanbul ignore next */
@@ -306,8 +279,8 @@ module.exports = (options) => {
     }
 
     function disconnect (error) {
-      connectionLog.error({ error: error })
-      json.write({ error: error })
+      connectionLog.error({ error })
+      json.write({ error })
       if (reading) {
         destroyStreams()
         writeQueue.kill()
