@@ -22,7 +22,7 @@
     "uuid": "^3.3.2"
   },
   "devDependencies": {
-    "deep-equal": "^1.0.1",
+    "deep-equal": "^2.0.1",
     "dev-null": "^0.1.1",
     "encoding-down": "^6.1.0",
     "istanbul": "^0.4.4",
