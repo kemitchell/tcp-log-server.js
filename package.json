@@ -39,7 +39,7 @@
     "kappa",
     "log"
   ],
-  "license": "MIT",
+  "license": "BlueOak-1.0.0",
   "repository": "kemitchell/tcp-log-server.js",
   "scripts": {
     "coverage": "istanbul check-coverage",
