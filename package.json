@@ -12,7 +12,6 @@
     "end-of-stream": "^1.1.0",
     "fast-json-stable-stringify": "^2.1.0",
     "fs-blob-store": "^5.2.1",
-    "leveldown": "^5.1.1",
     "lock": "^1.1.0",
     "pino": "^5.12.6",
     "split2": "^3.1.1",

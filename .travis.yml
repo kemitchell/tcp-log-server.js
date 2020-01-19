@@ -5,6 +5,3 @@ sudo: false
 script:
   - "npm run coverage"
   - "npm run lint"
-env:
-  - "LEVELDOWN=memdown"
-  - "LEVELDOWN=leveldown"
