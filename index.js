@@ -7,7 +7,7 @@ var through2 = require('through2')
 var uuid = require('uuid').v4
 
 module.exports = function factory (
-  serverLog, dataLog, blobs, emitter, hashFunction
+  serverLog, file, blobs, emitter, hashFunction
 ) {
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
@@ -83,7 +83,7 @@ module.exports = function factory (
             event: 'appending',
             hash: hash
           })
-          dataLog.append(hash, function (error, index) {
+          file.append(hash, function (error, index) {
             /* istanbul ignore if */
             if (error) {
               writeLog.error(error)
@@ -160,7 +160,7 @@ module.exports = function factory (
       var streamLog = connectionLog.child({ phase: 'stream' })
       streamLog.info({ event: 'create' })
 
-      var readStream = dataLog.createStream({
+      var readStream = file.createStream({
         from: message.from - 1,
         limit: message.read
       })
@@ -258,7 +258,7 @@ module.exports = function factory (
       function finish () {
         destroyStreams()
         emitter.removeListener('entry', onAppend)
-        dataLog.head(function (error, head) {
+        file.head(function (error, head) {
           /* istanbul ignore if */
           if (error) {
             streamLog.error(error)
