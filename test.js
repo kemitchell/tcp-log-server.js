@@ -90,8 +90,7 @@ tape('writes before and after read', (test) => {
 
 tape('buffering', (test) => {
   testConnections(2, (clients, server) => {
-    const reading = clients[0]
-    const writing = clients[1]
+    const [reading, writing] = clients
     const received = []
     let receivedCurrent = false
     reading.on('data', (data) => {
@@ -133,8 +132,7 @@ tape('buffering', (test) => {
 
 tape('buffering limited pull', (test) => {
   testConnections(2, (clients, server) => {
-    const reading = clients[0]
-    const writing = clients[1]
+    const [reading, writing] = clients
     const received = []
     reading.on('data', (data) => {
       received.push(data)
@@ -173,8 +171,7 @@ tape('buffering limited pull', (test) => {
 
 tape('two clients', (test) => {
   testConnections(2, (clients, server) => {
-    const ana = clients[0]
-    const bob = clients[1]
+    const [ana, bob] = clients
     const anaWasHere = { message: 'Ana was here.' }
     const bobWasHere = { message: 'Bob was here.' }
 
@@ -229,8 +226,7 @@ tape('old entry', (test) => {
 
 tape('read from future index', (test) => {
   testConnections(2, (clients, server) => {
-    const readingClient = clients[0]
-    const writingClient = clients[1]
+    const [readingClient, writingClient] = clients
     const entries = [{ a: 1 }, { b: 2 }]
     readingClient.on('data', (data) => {
       /* istanbul ignore if */
@@ -252,8 +248,7 @@ tape('read from future index', (test) => {
 
 tape('read from later', (test) => {
   testConnections(2, (clients, server) => {
-    const readingClient = clients[0]
-    const writingClient = clients[1]
+    const [readingClient, writingClient] = clients
     const entries = [{ a: 1 }, { b: 2 }, { c: 3 }]
     const received = []
     readingClient.on('data', (data) => {
@@ -279,8 +274,7 @@ tape('read from later', (test) => {
 
 tape('current signal', (test) => {
   testConnections(2, (clients, server) => {
-    const readingClient = clients[0]
-    const writingClient = clients[1]
+    const [readingClient, writingClient] = clients
     const entries = [{ a: 1 }, { b: 2 }, { c: 3 }]
     const messages = []
     const expected = [
@@ -312,8 +306,7 @@ tape('current signal', (test) => {
 
 tape('successive reads', (test) => {
   testConnections(2, (clients, server) => {
-    const readingClient = clients[0]
-    const writingClient = clients[1]
+    const [readingClient, writingClient] = clients
     const entries = [{ a: 1 }, { b: 2 }, { c: 3 }]
     const received = []
     const expected = [

@@ -13,11 +13,8 @@ const uuid = require('uuid').v4
 const lock = Lock()
 
 module.exports = (options) => {
-  const log = options.log
-  const file = options.file
-  const blobs = options.blobs
+  const { log, file, blobs, emitter } = options
   const hashFunction = options.hashFunction || sha256
-  const emitter = options.emitter
   const hashBytes = options.hashBytes || 64
   const lineBytes = hashBytes + 1
   return (connection) => {
