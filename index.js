@@ -6,7 +6,7 @@ var duplexJSON = require('duplex-json-stream')
 var endOfStream = require('end-of-stream')
 var fs = require('fs')
 var split2 = require('split2')
-var stringify = require('json-stable-stringify')
+var stringify = require('fast-json-stable-stringify')
 var through2 = require('through2')
 var uuid = require('uuid').v4
 
