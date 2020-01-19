@@ -1,3 +1,4 @@
+var crypto = require('crypto')
 var Lock = require('lock').Lock
 var asyncQueue = require('async.queue')
 var concatStream = require('concat-stream')
@@ -14,6 +15,8 @@ var lock = Lock()
 module.exports = function factory (
   log, file, blobs, emitter, hashFunction, hashBytes
 ) {
+  if (!hashFunction) hashFunction = sha256
+  if (!hashBytes) hashBytes = 64
   var lineBytes = hashBytes + 1
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
@@ -351,4 +354,10 @@ function has (argument, key, predicate) {
 
 function isPositiveInteger (argument) {
   return Number.isInteger(argument) && argument > 0
+}
+
+function sha256 (input) {
+  return crypto.createHash('sha256')
+    .update(input)
+    .digest('hex')
 }

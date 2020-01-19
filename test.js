@@ -10,12 +10,6 @@ var pino = require('pino')
 var rimraf = require('rimraf')
 var tape = require('tape')
 
-var sha256 = function (argument) {
-  return crypto.createHash('sha256')
-    .update(argument)
-    .digest('hex')
-}
-
 tape('confirm writes', function (test) {
   simpleTest({
     send: [{ entry: { a: 1 }, id: 'abc123' }],
@@ -433,9 +427,7 @@ function testConnections (numberOfClients, callback) {
   // Pipe log messages to nowhere.
   var log = pino({}, devnull())
   var emitter = new (require('events').EventEmitter)()
-  var handler = require('./')(
-    log, file, blobs, emitter, sha256, 64
-  )
+  var handler = require('./')(log, file, blobs, emitter)
   var server = net.createServer()
     .on('connection', handler)
     .once('close', function () {
