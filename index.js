@@ -7,7 +7,7 @@ var through2 = require('through2')
 var uuid = require('uuid').v4
 
 module.exports = function factory (
-  serverLog, file, blobs, emitter, hashFunction
+  log, file, blobs, emitter, hashFunction
 ) {
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
@@ -15,7 +15,7 @@ module.exports = function factory (
     connection.setKeepAlive(true)
 
     // Set up a child log for this connection, identified by UUID.
-    var connectionLog = serverLog.child({ connection: uuid() })
+    var connectionLog = log.child({ connection: uuid() })
     connectionLog.info({
       event: 'connected',
       address: connection.remoteAddress,
