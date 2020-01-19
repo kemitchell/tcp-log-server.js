@@ -1,32 +1,32 @@
-var crypto = require('crypto')
-var Lock = require('lock').Lock
-var asyncQueue = require('async.queue')
-var concatStream = require('concat-stream')
-var duplexJSON = require('duplex-json-stream')
-var endOfStream = require('end-of-stream')
-var fs = require('fs')
-var split2 = require('split2')
-var stringify = require('fast-json-stable-stringify')
-var through2 = require('through2')
-var uuid = require('uuid').v4
+const crypto = require('crypto')
+const Lock = require('lock').Lock
+const asyncQueue = require('async.queue')
+const concatStream = require('concat-stream')
+const duplexJSON = require('duplex-json-stream')
+const endOfStream = require('end-of-stream')
+const fs = require('fs')
+const split2 = require('split2')
+const stringify = require('fast-json-stable-stringify')
+const through2 = require('through2')
+const uuid = require('uuid').v4
 
-var lock = Lock()
+const lock = Lock()
 
 module.exports = function factory (options) {
-  var log = options.log
-  var file = options.file
-  var blobs = options.blobs
-  var hashFunction = options.hashFunction || sha256
-  var emitter = options.emitter
-  var hashBytes = options.hashBytes || 64
-  var lineBytes = hashBytes + 1
+  const log = options.log
+  const file = options.file
+  const blobs = options.blobs
+  const hashFunction = options.hashFunction || sha256
+  const emitter = options.emitter
+  const hashBytes = options.hashBytes || 64
+  const lineBytes = hashBytes + 1
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
     // Enable keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
 
     // Set up a child log for this connection, identified by UUID.
-    var connectionLog = log.child({ connection: uuid() })
+    const connectionLog = log.child({ connection: uuid() })
     connectionLog.info({
       event: 'connected',
       address: connection.remoteAddress,
@@ -49,7 +49,7 @@ module.exports = function factory (options) {
       })
 
     // Send newline-delimited JSON back and forth across the connection.
-    var json = duplexJSON(connection)
+    const json = duplexJSON(connection)
       .once('error', function () {
         disconnect('invalid JSON')
       })
@@ -68,17 +68,17 @@ module.exports = function factory (options) {
     // - from (Number): The index of the first entry to send.
     //
     // - through (Number): The index of the last entry to send.
-    var reading = false
+    let reading = false
 
     // An asynchronous queue for appending to the log. Ensures that each
     // append operation can read the head of the log and number itself
     // appropriately.
-    var writeQueue = asyncQueue(function write (message, done) {
+    const writeQueue = asyncQueue(function write (message, done) {
       // Compute the hash of the entry's content.
-      var content = stringify(message.entry)
-      var hash = hashFunction(content)
+      const content = stringify(message.entry)
+      const hash = hashFunction(content)
       // Create a child log for this entry write.
-      var writeLog = connectionLog.child({ hash: hash })
+      const writeLog = connectionLog.child({ hash: hash })
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream(hash)
         .once('error', /* istanbul ignore next */ function (error) {
@@ -171,24 +171,24 @@ module.exports = function factory (options) {
       })
 
       // Phase 1: Stream entries from the LevelUP store.
-      var streamLog = connectionLog.child({ phase: 'stream' })
+      const streamLog = connectionLog.child({ phase: 'stream' })
       streamLog.info({ event: 'create' })
 
-      var start = (message.from - 1) * lineBytes
-      var end = start + (message.read * lineBytes) - 1
-      var readStream = fs.createReadStream(file, {
+      const start = (message.from - 1) * lineBytes
+      const end = start + (message.read * lineBytes) - 1
+      const readStream = fs.createReadStream(file, {
         start: start,
         end: end
       })
-      var split = split2('\n', { trailing: false })
+      const split = split2('\n', { trailing: false })
 
       // Track the highest index seen, so we know when we have sent
       // all the entries requested.
-      var highestIndex = message.from - 1
+      let highestIndex = message.from - 1
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
-      var transform = through2.obj(function (hash, _, done) {
+      const transform = through2.obj(function (hash, _, done) {
         highestIndex++
         blobs.createReadStream(hash)
           .once('error', onFatalError)
