@@ -99,19 +99,18 @@ module.exports = function factory (
                   id: message.id,
                   error: error.toString()
                 }, done)
-              } else {
-                writeLog.info({ event: 'wrote' })
-                readHead(function (error, index) {
-                  if (error) return done(error)
-                  // Send confirmation.
-                  json.write({
-                    id: message.id,
-                    index: index
-                  }, done)
-                  // Emit an event.
-                  emitter.emit('entry', index, message.entry, connection)
-                })
               }
+              writeLog.info({ event: 'wrote' })
+              readHead(function (error, index) {
+                if (error) return done(error)
+                // Send confirmation.
+                json.write({
+                  id: message.id,
+                  index: index
+                }, done)
+                // Emit an event.
+                emitter.emit('entry', index, message.entry, connection)
+              })
             })
           })
         })
@@ -124,19 +123,17 @@ module.exports = function factory (
       if (isReadMessage(message)) {
         if (reading) {
           connectionLog.warn('already reading')
-          json.write({ error: 'already reading' })
-        } else {
-          onReadMessage(message)
+          return json.write({ error: 'already reading' })
         }
+        return onReadMessage(message)
       } else if (isWriteMessage(message)) {
-        writeQueue.push(message)
-      } else {
-        connectionLog.warn({
-          event: 'invalid',
-          message: message
-        })
-        json.write({ error: 'invalid message' })
+        return writeQueue.push(message)
       }
+      connectionLog.warn({
+        event: 'invalid',
+        message: message
+      })
+      json.write({ error: 'invalid message' })
     })
 
     // Handle read requests.
@@ -215,58 +212,48 @@ module.exports = function factory (
 
       endOfStream(transform, function (error) {
         /* istanbul ignore if */
-        if (error) {
-          onFatalError(error)
-        } else {
-          // Phase 2: Send buffered entries.
-          reading.buffer.forEach(function (buffered) {
-            highestIndex = buffered.index
-            streamLog.info({
-              event: 'unbuffer',
-              index: buffered.index
-            })
-            sendEntry(buffered.index, buffered.entry)
+        if (error) return onFatalError(error)
+        // Phase 2: Send buffered entries.
+        reading.buffer.forEach(function (buffered) {
+          highestIndex = buffered.index
+          streamLog.info({
+            event: 'unbuffer',
+            index: buffered.index
           })
-          if (sentAllRequested()) {
-            finish()
-          } else {
-            json.write({ current: true })
-            // Set flags to start Phase 3.
-            reading.doneStreaming = true
-            reading.buffer = null
-          }
-        }
+          sendEntry(buffered.index, buffered.entry)
+        })
+        if (sentAllRequested()) return finish()
+        json.write({ current: true })
+        // Set flags to start Phase 3.
+        reading.doneStreaming = true
+        reading.buffer = null
       })
 
       function onAppend (index, entry, fromConnection) {
         // Do not send entries from earlier in the log than requested.
-        if (index < reading.from) {
-          // pass
+        if (index < reading.from) return // pass
         // Do not send entries later than requested.
-        } else if (index > reading.through) {
-          // pass
+        if (index > reading.through) return // pass
         // Phase 3: Forward entries as they are appended.
-        } else if (reading.doneStreaming) {
+        if (reading.doneStreaming) {
           connectionLog.info({
             event: 'forward',
             index: index
           })
           sendEntry(index, entry)
           highestIndex = index
-          if (sentAllRequested()) {
-            finish()
-          }
-        // Buffer for Phase 2.
-        } else {
-          connectionLog.info({
-            event: 'buffer',
-            index: index
-          })
-          reading.buffer.push({
-            index: index,
-            entry: entry
-          })
+          if (sentAllRequested()) finish()
+          return
         }
+        // Buffer for Phase 2.
+        connectionLog.info({
+          event: 'buffer',
+          index: index
+        })
+        reading.buffer.push({
+          index: index,
+          entry: entry
+        })
       }
 
       function sentAllRequested () {
