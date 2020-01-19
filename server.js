@@ -6,7 +6,7 @@ var PORT = parseInt(process.env.PORT) || 8089
 
 var pino = require('pino')()
 var handler = require('./')({
-  pino: pino,
+  log: pino,
   file: FILE,
   blogs: BLOBS === 'memory'
     ? require('abstract-blob-store')()
