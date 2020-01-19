@@ -27,33 +27,16 @@ Configure `tcp-log-server` with environment variables:
 - `PORT` for TCP
 - `BLOBS` directory for entry JSON files, named by hash, or `memory` to
   store in memory
-- `LEVELDOWN` directory for [LevelDB] data files, or `memory` to
-  store in memory
-
-[LevelDB]: https://npmjs.com/packages/leveldown
+- `FILE` for the list of entries
 
 ## Node.js
 
 The package exports a factory function.  Given a [pino] log, a
-[LevelUP] instance, an [abstract-blob-store], and an `EventEmitter`,
-it returns a TCP connection handler function suitable for
-`net.createServer(handler)`.  Any [LevelDOWN] and [abstract-blob-store]
-will do.  Store log entries or blobs in memory, in a remote store,
-or in whatever combination you like.
-
-[LevelUP]: https://npmjs.com/packages/levelup
+file path, an [abstract-blob-store], an `EventEmitter`, and a hash
+function, it returns a TCP connection handler function suitable for
+`net.createServer(handler)`.
 
 [abstract-blob-store]: https://npmjs.com/packages/abstract-blob-store
-
-[LevelDOWN]: https://www.npmjs.com/package/abstract-leveldown
-
-There is one caveat: The storage back-end for the LevelUP must support
-[snapshots].  [level-party] and a few other helper packages prevent
-snapshotting.
-
-[snapshots]: https://github.com/level/leveldown#snapshots
-
-[level-party]: https://www.npmjs.com/package/level-party
 
 ## Protocol
 
