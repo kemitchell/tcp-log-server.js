@@ -183,7 +183,7 @@ module.exports = function factory (
           }))
       })
 
-      // Push references so the streams so they can be unpiped and
+      // Push references to the streams so they can be unpiped and
       // destroyed later.
       reading.streams.push(readStream)
       reading.streams.push(transform)
