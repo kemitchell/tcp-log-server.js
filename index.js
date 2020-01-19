@@ -36,16 +36,13 @@ module.exports = (options) => {
     // Log end-of-connection events.
     connection
       .once('end', () => {
-        connectionLog.info({ event: 'end' })
+        connectionLog.info('end')
       })
       .once('error', /* istanbul ignore next */ (error) => {
         connectionLog.error(error)
       })
       .once('close', (error) => {
-        connectionLog.info({
-          event: 'close',
-          error: error
-        })
+        connectionLog.info({ error }, 'close')
       })
 
     // Send newline-delimited JSON back and forth across the connection.
@@ -92,7 +89,7 @@ module.exports = (options) => {
           lock(file, (unlock) => {
             done = unlock(done)
             // Append an entry to the log with the hash of the entry.
-            writeLog.info({ event: 'appending', hash })
+            writeLog.info({ hash }, 'appending')
             fs.writeFile(file, hash + '\n', { flag: 'a' }, (error) => {
               /* istanbul ignore if */
               if (error) {
@@ -102,7 +99,7 @@ module.exports = (options) => {
                   error: error.toString()
                 }, done)
               }
-              writeLog.info({ event: 'wrote' })
+              writeLog.info('wrote')
               readHead((error, index) => {
                 if (error) return done(error)
                 // Send confirmation.
@@ -118,7 +115,7 @@ module.exports = (options) => {
 
     // Route client messages to appropriate handlers.
     json.on('data', (message) => {
-      connectionLog.info({ event: 'message', message })
+      connectionLog.info({ message }, 'message')
       if (isReadMessage(message)) {
         if (reading) {
           connectionLog.warn('already reading')
@@ -128,7 +125,7 @@ module.exports = (options) => {
       } else if (isWriteMessage(message)) {
         return writeQueue.push(message)
       }
-      connectionLog.warn({ event: 'invalid', message })
+      connectionLog.warn({ message }, 'invalid')
       json.write({ error: 'invalid message' })
     })
 
@@ -163,7 +160,7 @@ module.exports = (options) => {
 
       // Phase 1: Stream entries from the LevelUP store.
       const streamLog = connectionLog.child({ phase: 'stream' })
-      streamLog.info({ event: 'create' })
+      streamLog.info('create')
 
       const start = (message.from - 1) * lineBytes
       const end = start + (message.read * lineBytes) - 1
@@ -229,14 +226,14 @@ module.exports = (options) => {
         if (index > reading.through) return // pass
         // Phase 3: Forward entries as they are appended.
         if (reading.doneStreaming) {
-          connectionLog.info({ event: 'forward', index })
+          connectionLog.info({ index }, 'forward')
           sendEntry(index, entry)
           highestIndex = index
           if (sentAllRequested()) finish()
           return
         }
         // Buffer for Phase 2.
-        connectionLog.info({ event: 'buffer', index })
+        connectionLog.info({ index }, 'buffer')
         reading.buffer.push({ index, entry })
       }
 
@@ -260,7 +257,7 @@ module.exports = (options) => {
 
       function sendEntry (index, entry) {
         json.write({ index, entry })
-        connectionLog.info({ event: 'sent', index })
+        connectionLog.info({ index }, 'sent')
       }
 
       /* istanbul ignore next */
