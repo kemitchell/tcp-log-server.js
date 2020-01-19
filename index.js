@@ -12,9 +12,9 @@ var uuid = require('uuid').v4
 var lock = Lock()
 
 module.exports = function factory (
-  log, file, blobs, emitter, hashFunction, digestBytes
+  log, file, blobs, emitter, hashFunction, hashBytes
 ) {
-  var lineBytes = digestBytes + 1
+  var lineBytes = hashBytes + 1
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
     // Enable keep-alive to keep them from dropping.
@@ -186,9 +186,9 @@ module.exports = function factory (
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
-      var transform = through2.obj(function (digest, _, done) {
+      var transform = through2.obj(function (hash, _, done) {
         highestIndex++
-        blobs.createReadStream(digest)
+        blobs.createReadStream(hash)
           .once('error', onFatalError)
           .pipe(concatStream(function (json) {
             done(null, {
