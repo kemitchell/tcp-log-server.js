@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-var NAME = require('./package.json').name
-var FILE = process.env.FILE || ('.' + NAME + '.file')
-var BLOBS = process.env.BLOBS || ('.' + NAME + '.blobs')
-var PORT = parseInt(process.env.PORT) || 8089
+const NAME = require('./package.json').name
+const FILE = process.env.FILE || ('.' + NAME + '.file')
+const BLOBS = process.env.BLOBS || ('.' + NAME + '.blobs')
+const PORT = parseInt(process.env.PORT) || 8089
 
-var pino = require('pino')()
-var handler = require('./')({
+const pino = require('pino')()
+const handler = require('./')({
   log: pino,
   file: FILE,
   blogs: BLOBS === 'memory'
@@ -14,23 +14,19 @@ var handler = require('./')({
   emitter: new (require('events').EventEmitter)()
 })
 
-var sockets = require('stream-set')()
-var server = require('net').createServer()
-  .on('connection', function (socket) {
-    sockets.add(socket)
-  })
+const sockets = require('stream-set')()
+const server = require('net').createServer()
+  .on('connection', (socket) => { sockets.add(socket) })
   .on('connection', handler)
 
-server.listen(PORT, function () {
+server.listen(PORT, () => {
   pino.info({
     event: 'listening',
     port: this.address().port
   })
 })
 
-process.on('exit', function () {
-  sockets.forEach(function (socket) {
-    socket.destroy()
-  })
+process.on('exit', () => {
+  sockets.forEach((socket) => { socket.destroy() })
   server.close()
 })
