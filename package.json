@@ -26,7 +26,7 @@
     "dev-null": "^0.1.1",
     "encoding-down": "^6.1.0",
     "istanbul": "^0.4.4",
-    "rimraf": "^2.5.3",
+    "rimraf": "^3.0.0",
     "standard": "^14.1.0",
     "tape": "^4.6.0"
   },
