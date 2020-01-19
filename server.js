@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 var NAME = require('./package.json').name
-var LEVELDOWN = process.env.LEVELDOWN || ('.' + NAME + '.leveldb')
+var FILE = process.env.FILE || ('.' + NAME + '.file')
 var BLOBS = process.env.BLOBS || ('.' + NAME + '.blobs')
 var PORT = parseInt(process.env.PORT) || 8089
 
 var crypto = require('crypto')
-var level = LEVELDOWN === 'memory'
-  ? require('levelup')(require('encoding-down')(require('memdown')()))
-  : require('levelup')(require('leveldown')(LEVELDOWN))
 var pino = require('pino')()
 var handler = require('./')(
   pino,
-  require('level-simple-log')(level),
+  FILE,
   BLOBS === 'memory'
     ? require('abstract-blob-store')()
     : require('fs-blob-store')(BLOBS),
@@ -20,7 +17,8 @@ var handler = require('./')(
     return crypto.createHash('sha256')
       .update(argument)
       .digest('hex')
-  }
+  },
+  64
 )
 
 var sockets = require('stream-set')()

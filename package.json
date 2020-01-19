@@ -12,11 +12,10 @@
     "end-of-stream": "^1.1.0",
     "fs-blob-store": "^5.2.1",
     "json-stable-stringify": "^1.0.1",
-    "level-simple-log": "^3.0.0",
     "leveldown": "^5.1.1",
-    "levelup": "^4.1.0",
-    "memdown": "^4.1.0",
+    "lock": "^1.1.0",
     "pino": "^5.12.6",
+    "split2": "^3.1.1",
     "stream-set": "^1.1.0",
     "through2": "^3.0.1",
     "uuid": "^3.3.2"
@@ -24,7 +23,6 @@
   "devDependencies": {
     "deep-equal": "^2.0.1",
     "dev-null": "^0.1.1",
-    "encoding-down": "^6.1.0",
     "istanbul": "^0.4.4",
     "rimraf": "^3.0.0",
     "standard": "^14.1.0",

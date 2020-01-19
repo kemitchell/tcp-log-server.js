@@ -1,14 +1,20 @@
+var Lock = require('lock').Lock
 var asyncQueue = require('async.queue')
 var concatStream = require('concat-stream')
 var duplexJSON = require('duplex-json-stream')
 var endOfStream = require('end-of-stream')
+var fs = require('fs')
+var split2 = require('split2')
 var stringify = require('json-stable-stringify')
 var through2 = require('through2')
 var uuid = require('uuid').v4
 
+var lock = Lock()
+
 module.exports = function factory (
-  log, file, blobs, emitter, hashFunction
+  log, file, blobs, emitter, hashFunction, digestBytes
 ) {
+  var lineBytes = digestBytes + 1
   return function tcpConnectionHandler (connection) {
     // Connections will be held open long-term, and may sit idle.
     // Enable keep-alive to keep them from dropping.
@@ -69,7 +75,7 @@ module.exports = function factory (
       // Create a child log for this entry write.
       var writeLog = connectionLog.child({ hash: hash })
       // Append the entry payload in the blob store, by hash.
-      blobs.createWriteStream({ key: hashToPath(hash) })
+      blobs.createWriteStream(hash)
         .once('error', /* istanbul ignore next */ function (error) {
           writeLog.error(error)
           json.write({
@@ -78,29 +84,35 @@ module.exports = function factory (
           }, done)
         })
         .once('finish', function appendToLog () {
-          // Append an entry to the log with the hash of the entry.
-          writeLog.info({
-            event: 'appending',
-            hash: hash
-          })
-          file.append(hash, function (error, index) {
-            /* istanbul ignore if */
-            if (error) {
-              writeLog.error(error)
-              json.write({
-                id: message.id,
-                error: error.toString()
-              }, done)
-            } else {
-              writeLog.info({ event: 'wrote' })
-              // Send confirmation.
-              json.write({
-                id: message.id,
-                index: index
-              }, done)
-              // Emit an event.
-              emitter.emit('entry', index, message.entry, connection)
-            }
+          lock(file, function (unlock) {
+            done = unlock(done)
+            // Append an entry to the log with the hash of the entry.
+            writeLog.info({
+              event: 'appending',
+              hash: hash
+            })
+            fs.writeFile(file, hash + '\n', { flag: 'a' }, function (error) {
+              /* istanbul ignore if */
+              if (error) {
+                writeLog.error(error)
+                return json.write({
+                  id: message.id,
+                  error: error.toString()
+                }, done)
+              } else {
+                writeLog.info({ event: 'wrote' })
+                readHead(function (error, index) {
+                  if (error) return done(error)
+                  // Send confirmation.
+                  json.write({
+                    id: message.id,
+                    index: index
+                  }, done)
+                  // Emit an event.
+                  emitter.emit('entry', index, message.entry, connection)
+                })
+              }
+            })
           })
         })
         .end(content)
@@ -160,24 +172,27 @@ module.exports = function factory (
       var streamLog = connectionLog.child({ phase: 'stream' })
       streamLog.info({ event: 'create' })
 
-      var readStream = file.createStream({
-        from: message.from - 1,
-        limit: message.read
+      var start = (message.from - 1) * lineBytes
+      var end = start + (message.read * lineBytes) - 1
+      var readStream = fs.createReadStream(file, {
+        start: start,
+        end: end
       })
+      var split = split2('\n', { trailing: false })
 
       // Track the highest index seen, so we know when we have sent
       // all the entries requested.
-      var highestIndex = 0
+      var highestIndex = message.from - 1
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
-      var transform = through2.obj(function (record, _, done) {
-        highestIndex = record.index
-        blobs.createReadStream({ key: hashToPath(record.entry) })
+      var transform = through2.obj(function (digest, _, done) {
+        highestIndex++
+        blobs.createReadStream(digest)
           .once('error', onFatalError)
           .pipe(concatStream(function (json) {
             done(null, {
-              index: record.index,
+              index: highestIndex,
               entry: JSON.parse(json)
             })
           }))
@@ -186,10 +201,13 @@ module.exports = function factory (
       // Push references to the streams so they can be unpiped and
       // destroyed later.
       reading.streams.push(readStream)
+      reading.streams.push(split)
       reading.streams.push(transform)
 
       // Build the data pipeline.
       readStream
+        .once('error', onFatalError)
+        .pipe(split)
         .once('error', onFatalError)
         .pipe(transform)
         .once('error', onFatalError)
@@ -258,15 +276,14 @@ module.exports = function factory (
       function finish () {
         destroyStreams()
         emitter.removeListener('entry', onAppend)
-        file.head(function (error, head) {
+        readHead(function (error, head) {
           /* istanbul ignore if */
           if (error) {
             streamLog.error(error)
-            disconnect(error.toString())
-          } else {
-            json.write({ head: head })
-            reading = false
+            return disconnect(error.toString())
           }
+          json.write({ head: head })
+          reading = false
         })
       }
 
@@ -307,6 +324,13 @@ module.exports = function factory (
       connection.destroy()
     }
   }
+
+  function readHead (callback) {
+    fs.stat(file, function (error, stats) {
+      if (error) return callback(error)
+      callback(null, stats.size / lineBytes)
+    })
+  }
 }
 
 function isReadMessage (argument) {
@@ -340,8 +364,4 @@ function has (argument, key, predicate) {
 
 function isPositiveInteger (argument) {
   return Number.isInteger(argument) && argument > 0
-}
-
-function hashToPath (hash) {
-  return hash.slice(0, 2) + '/' + hash.slice(2)
 }
