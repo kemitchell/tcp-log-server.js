@@ -12,7 +12,7 @@ const uuid = require('uuid').v4
 
 const lock = Lock()
 
-module.exports = function factory (options) {
+module.exports = (options) => {
   const log = options.log
   const file = options.file
   const blobs = options.blobs
@@ -20,7 +20,7 @@ module.exports = function factory (options) {
   const emitter = options.emitter
   const hashBytes = options.hashBytes || 64
   const lineBytes = hashBytes + 1
-  return function tcpConnectionHandler (connection) {
+  return (connection) => {
     // Connections will be held open long-term, and may sit idle.
     // Enable keep-alive to keep them from dropping.
     connection.setKeepAlive(true)
@@ -35,13 +35,13 @@ module.exports = function factory (options) {
 
     // Log end-of-connection events.
     connection
-      .once('end', function () {
+      .once('end', () => {
         connectionLog.info({ event: 'end' })
       })
-      .once('error', /* istanbul ignore next */ function (error) {
+      .once('error', /* istanbul ignore next */ (error) => {
         connectionLog.error(error)
       })
-      .once('close', function (error) {
+      .once('close', (error) => {
         connectionLog.info({
           event: 'close',
           error: error
@@ -50,7 +50,7 @@ module.exports = function factory (options) {
 
     // Send newline-delimited JSON back and forth across the connection.
     const json = duplexJSON(connection)
-      .once('error', function () {
+      .once('error', () => {
         disconnect('invalid JSON')
       })
 
@@ -73,7 +73,7 @@ module.exports = function factory (options) {
     // An asynchronous queue for appending to the log. Ensures that each
     // append operation can read the head of the log and number itself
     // appropriately.
-    const writeQueue = asyncQueue(function write (message, done) {
+    const writeQueue = asyncQueue((message, done) => {
       // Compute the hash of the entry's content.
       const content = stringify(message.entry)
       const hash = hashFunction(content)
@@ -81,22 +81,22 @@ module.exports = function factory (options) {
       const writeLog = connectionLog.child({ hash: hash })
       // Append the entry payload in the blob store, by hash.
       blobs.createWriteStream(hash)
-        .once('error', /* istanbul ignore next */ function (error) {
+        .once('error', /* istanbul ignore next */ (error) => {
           writeLog.error(error)
           json.write({
             id: message.id,
             error: error.toString()
           }, done)
         })
-        .once('finish', function appendToLog () {
-          lock(file, function (unlock) {
+        .once('finish', () => {
+          lock(file, (unlock) => {
             done = unlock(done)
             // Append an entry to the log with the hash of the entry.
             writeLog.info({
               event: 'appending',
               hash: hash
             })
-            fs.writeFile(file, hash + '\n', { flag: 'a' }, function (error) {
+            fs.writeFile(file, hash + '\n', { flag: 'a' }, (error) => {
               /* istanbul ignore if */
               if (error) {
                 writeLog.error(error)
@@ -106,7 +106,7 @@ module.exports = function factory (options) {
                 }, done)
               }
               writeLog.info({ event: 'wrote' })
-              readHead(function (error, index) {
+              readHead((error, index) => {
                 if (error) return done(error)
                 // Send confirmation.
                 json.write({
@@ -123,7 +123,7 @@ module.exports = function factory (options) {
     })
 
     // Route client messages to appropriate handlers.
-    json.on('data', function routeMessage (message) {
+    json.on('data', (message) => {
       connectionLog.info({ event: 'message', message: message })
       if (isReadMessage(message)) {
         if (reading) {
@@ -166,7 +166,7 @@ module.exports = function factory (options) {
       }
 
       // Start buffering new entries for Phase 2.
-      setImmediate(function () {
+      setImmediate(() => {
         emitter.addListener('entry', onAppend)
       })
 
@@ -188,11 +188,11 @@ module.exports = function factory (options) {
 
       // For each index-hash pair, read the corresponding content from
       // the blog store and forward a complete entry object.
-      const transform = through2.obj(function (hash, _, done) {
+      const transform = through2.obj((hash, _, done) => {
         highestIndex++
         blobs.createReadStream(hash)
           .once('error', onFatalError)
-          .pipe(concatStream(function (json) {
+          .pipe(concatStream((json) => {
             done(null, {
               index: highestIndex,
               entry: JSON.parse(json)
@@ -215,11 +215,11 @@ module.exports = function factory (options) {
         .once('error', onFatalError)
         .pipe(json, { end: false })
 
-      endOfStream(transform, function (error) {
+      endOfStream(transform, (error) => {
         /* istanbul ignore if */
         if (error) return onFatalError(error)
         // Phase 2: Send buffered entries.
-        reading.buffer.forEach(function (buffered) {
+        reading.buffer.forEach((buffered) => {
           highestIndex = buffered.index
           streamLog.info({
             event: 'unbuffer',
@@ -268,7 +268,7 @@ module.exports = function factory (options) {
       function finish () {
         destroyStreams()
         emitter.removeListener('entry', onAppend)
-        readHead(function (error, head) {
+        readHead((error, head) => {
           /* istanbul ignore if */
           if (error) {
             streamLog.error(error)
@@ -299,7 +299,7 @@ module.exports = function factory (options) {
     }
 
     function destroyStreams () {
-      reading.streams.forEach(function (stream) {
+      reading.streams.forEach((stream) => {
         stream.unpipe()
         stream.destroy()
       })
@@ -318,7 +318,7 @@ module.exports = function factory (options) {
   }
 
   function readHead (callback) {
-    fs.stat(file, function (error, stats) {
+    fs.stat(file, (error, stats) => {
       if (error) return callback(error)
       callback(null, stats.size / lineBytes)
     })
@@ -336,12 +336,8 @@ function isReadMessage (argument) {
 function isWriteMessage (argument) {
   return (
     typeof argument === 'object' &&
-    has(argument, 'id', function (id) {
-      return id.length > 0
-    }) &&
-    has(argument, 'entry', function (entry) {
-      return typeof entry === 'object'
-    })
+    has(argument, 'id', (id) => id.length > 0) &&
+    has(argument, 'entry', (entry) => typeof entry === 'object')
   )
 }
 
