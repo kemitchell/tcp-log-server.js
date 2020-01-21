@@ -25,10 +25,9 @@ module.exports = (options) => {
     // Set up a child log for this connection, identified by UUID.
     const connectionLog = log.child({ connection: uuid() })
     connectionLog.info({
-      event: 'connected',
       address: connection.remoteAddress,
       port: connection.removePort
-    })
+    }, 'connected')
 
     // Log end-of-connection events.
     connection
@@ -204,9 +203,8 @@ module.exports = (options) => {
         reading.buffer.forEach((buffered) => {
           highestIndex = buffered.index
           streamLog.info({
-            event: 'unbuffer',
             index: buffered.index
-          })
+          }, 'unbuffered')
           sendEntry(buffered.index, buffered.entry)
         })
         if (sentAllRequested()) return finish()
